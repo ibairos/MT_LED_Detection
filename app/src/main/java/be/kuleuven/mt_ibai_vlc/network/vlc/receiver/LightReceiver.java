@@ -1,4 +1,4 @@
-package tk.porrazirauki.mt_leddetection.analyzers;
+package be.kuleuven.mt_ibai_vlc.network.vlc.receiver;
 
 import android.app.Activity;
 import android.graphics.Rect;
@@ -6,8 +6,6 @@ import android.util.Log;
 import android.util.Pair;
 import android.widget.Toast;
 
-import androidx.camera.core.CameraInfoUnavailableException;
-import androidx.camera.core.CameraX;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
 
@@ -21,12 +19,13 @@ import java.util.BitSet;
 import java.util.OptionalDouble;
 import java.util.concurrent.TimeUnit;
 
-import tk.porrazirauki.mt_leddetection.events.CustomEventListener;
+import be.kuleuven.mt_ibai_vlc.common.Enums.ANALYZER_STATE;
+import be.kuleuven.mt_ibai_vlc.events.CustomEventListener;
 
-public class LuminosityAnalyzer implements ImageAnalysis.Analyzer {
+public class LightReceiver implements ImageAnalysis.Analyzer {
 
     // Logging tag
-    private static final String TAG = "LuminosityAnalyzer";
+    private static final String TAG = "LightReceiver";
 
     // Constant parameters
     private static final Pair[] luminosityToleranceTable =
@@ -41,9 +40,9 @@ public class LuminosityAnalyzer implements ImageAnalysis.Analyzer {
                     new Pair<>(150, 1.075),
                     new Pair<>(Double.MAX_VALUE, 1.05)
             };
-    private static final double FRAME_RATE_SECONDS = 12;
+    private static final double FRAME_RATE_SECONDS = 8;
     private static final double SECOND_TO_NANOSECOND_RATIO = 1000000000;
-    private static final int UPDATE_RATE_LED_SECONDS = 3;
+    private static final int UPDATE_RATE_LED_SECONDS = 2;
     private static final double FRAME_RATE_NANOSECONDS =
             FRAME_RATE_SECONDS / SECOND_TO_NANOSECOND_RATIO;
     private static final long
@@ -59,7 +58,7 @@ public class LuminosityAnalyzer implements ImageAnalysis.Analyzer {
     private static final BitSet END_SEQ = BitSet.valueOf(new long[]{0b11111111});
     private static double luminosityTolerance;
     // Runtime variables
-    private TX_STATE TXState;
+    private ANALYZER_STATE TXState;
     private long lastAnalyzedTimestamp;
     private double initialLumAverage;
     private ArrayList<Double> lastLuminosityValues;
@@ -80,7 +79,7 @@ public class LuminosityAnalyzer implements ImageAnalysis.Analyzer {
     private Rect cropRect;
     private int imageWidth;
 
-    public LuminosityAnalyzer(Activity activity, Rect cropRect, int imageWidth) {
+    public LightReceiver(Activity activity, Rect cropRect, int imageWidth) {
         this.activity = activity;
         this.cropRect = cropRect;
         this.imageWidth = imageWidth;
@@ -90,9 +89,8 @@ public class LuminosityAnalyzer implements ImageAnalysis.Analyzer {
         resultBuffer = new BitSet();
         charBuffer.clear();
         result = "";
-        TXState = TX_STATE.LOADING;
-        ((CustomEventListener) activity).onEvent(TX_STATE.LOADING.toString(), null);
-
+        TXState = ANALYZER_STATE.LOADING;
+        ((CustomEventListener) activity).onAnalyzerEvent(ANALYZER_STATE.LOADING, null);
     }
 
     /**
@@ -117,14 +115,9 @@ public class LuminosityAnalyzer implements ImageAnalysis.Analyzer {
 
     @Override
     public void analyze(ImageProxy image, int rotationDegrees) {
-        try {
-            CameraX.getCameraControl(CameraX.LensFacing.BACK).cancelFocusAndMetering();
-        } catch (CameraInfoUnavailableException ignored) {
-        }
-
         long currentTimestamp = System.currentTimeMillis();
-        // Calculate the average luminescence no more often than every FRAME_RATE_SECONDS
 
+        // Calculate the average luminescence no more often than every FRAME_RATE_SECONDS
         if (currentTimestamp - lastAnalyzedTimestamp >=
                 TIME_PER_FRAME_MILLIS * FRAME_RATE_TOLERANCE) {
 
@@ -149,9 +142,9 @@ public class LuminosityAnalyzer implements ImageAnalysis.Analyzer {
                                 luminosityTolerance = (double) luminosityToleranceTable[i].second;
                             }
                         }
-                        TXState = TX_STATE.WAITING;
+                        TXState = ANALYZER_STATE.WAITING;
                         activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                                .onEvent(TX_STATE.WAITING.toString(), null));
+                                .onAnalyzerEvent(ANALYZER_STATE.WAITING, null));
                     }
                     break;
 
@@ -161,9 +154,9 @@ public class LuminosityAnalyzer implements ImageAnalysis.Analyzer {
                         //&& lastFrameLum / windowLumAverage < WINDOW_TOLERANCE) {
                         charBuffer.set(syncCharIndex);
                         syncCharIndex++;
-                        TXState = TX_STATE.STARTING;
+                        TXState = ANALYZER_STATE.STARTING;
                         activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                                .onEvent(TX_STATE.STARTING.toString(), null));
+                                .onAnalyzerEvent(ANALYZER_STATE.STARTING, null));
                     }
                     break;
 
@@ -179,9 +172,9 @@ public class LuminosityAnalyzer implements ImageAnalysis.Analyzer {
                                     "COMP - CB - " + new Gson().toJson(charBuffer.toLongArray()));
                             Log.e(TAG, "COMP - SS - " + new Gson().toJson(START_SEQ.toLongArray()));
                             if (charBuffer.equals(START_SEQ)) {
-                                TXState = TX_STATE.TX_STARTED;
+                                TXState = ANALYZER_STATE.TX_STARTED;
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                                        .onEvent(TX_STATE.TX_STARTED.toString(), null));
+                                        .onAnalyzerEvent(ANALYZER_STATE.TX_STARTED, null));
                             } else {
                                 Log.i(TAG, TXState.toString() + " - START_SEQ - Wrong -> " +
                                         Integer.toBinaryString((int) charBuffer.toLongArray()[0]));
@@ -198,9 +191,9 @@ public class LuminosityAnalyzer implements ImageAnalysis.Analyzer {
                                 syncSeqNum = 0;
                                 syncCharIndex = 0;
                                 charBuffer.clear();
-                                TXState = TX_STATE.WAITING;
+                                TXState = ANALYZER_STATE.WAITING;
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                                        .onEvent(TX_STATE.WAITING.toString(), null));
+                                        .onAnalyzerEvent(ANALYZER_STATE.WAITING, null));
                             }
                         } else {
                             syncCharIndex++;
@@ -228,9 +221,9 @@ public class LuminosityAnalyzer implements ImageAnalysis.Analyzer {
                                 charBuffer.clear();
                             } else {
                                 // Send last event
-                                TXState = TX_STATE.TX_ENDED;
+                                TXState = ANALYZER_STATE.TX_ENDED;
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                                        .onEvent(TX_STATE.TX_ENDED.toString(),
+                                        .onAnalyzerEvent(ANALYZER_STATE.TX_ENDED,
                                                 new Gson().toJson(result)));
                             }
                         }
@@ -251,9 +244,9 @@ public class LuminosityAnalyzer implements ImageAnalysis.Analyzer {
 
         // Convert the data into an array of pixel values
         OptionalDouble av = data.stream().mapToDouble(a -> a & 0xFF).average();
-        // Log the new luminosity value
+        // LogItem the new luminosity value
         double singleLum = av.isPresent() ? av.getAsDouble() : 0;
-        //Log.d(TAG, "SingleAverageLum: " + singleLum);
+        //LogItem.d(TAG, "SingleAverageLum: " + singleLum);
         lastLuminosityValues.add(singleLum);
 
         if (lastLuminosityValues.size() > SLIDING_WINDOW_SIZE) {
@@ -273,9 +266,7 @@ public class LuminosityAnalyzer implements ImageAnalysis.Analyzer {
 
     public String getResult() {
         Log.i(TAG, "RESULT_STR -> " + result);
-        Log.i(TAG, "RESULT_ARR ->" + new Gson().toJson(resultBuffer));
         return result;
     }
 
-    public enum TX_STATE {LOADING, WAITING, STARTING, TX_STARTED, TX_ENDED}
 }

@@ -1,6 +1,24 @@
 <resources>
+    <!-- Views -->
     <string name="app_name">MT - LED Detection</string>
     <string name="start">Start</string>
     <string name="stop">Stop</string>
     <string name="custom">Custom</string>
+    <string name="title_activity_main">MainActivity</string>
+    <string name="tx_data_text_hint">Text to transmit</string>
+    <string name="tx_mode">Transmission mode</string>
+    <string name="arduino_android">Arduino-Android</string>
+    <string name="android_arduino">Android-Arduino</string>
+    <string name="tx_config">Transmission configuration</string>
+    <string name="tx_results">Transmission results</string>
+    <string name="rx_data">Received text</string>
+    <string name="tx_state">Transmission state</string>
+    <string name="tx_accuracy">Transmission accuracy</string>
+    <string name="no_info">No information</string>
+    <string name="camera_view">Camera view</string>
+
+    <!-- Toasts -->
+    <string name="arduino_not_online">Arduino is not online!</string>
+    <string name="empty_text">Empty text!</string>
+
 </resources>
