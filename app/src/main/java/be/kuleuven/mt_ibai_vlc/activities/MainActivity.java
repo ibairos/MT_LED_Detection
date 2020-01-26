@@ -30,24 +30,16 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 import be.kuleuven.mt_ibai_vlc.R;
-import be.kuleuven.mt_ibai_vlc.common.Enums;
 import be.kuleuven.mt_ibai_vlc.events.CustomEventListener;
 import be.kuleuven.mt_ibai_vlc.model.LogItem;
+import be.kuleuven.mt_ibai_vlc.model.enums.AnalyzerState;
+import be.kuleuven.mt_ibai_vlc.model.enums.AndroidState;
+import be.kuleuven.mt_ibai_vlc.model.enums.ArduinoState;
+import be.kuleuven.mt_ibai_vlc.model.enums.TxMode;
 import be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseInterface;
 import be.kuleuven.mt_ibai_vlc.network.vlc.receiver.LightReceiver;
 import be.kuleuven.mt_ibai_vlc.network.vlc.sender.LightSender;
 
-import static be.kuleuven.mt_ibai_vlc.common.Enums.ANDROID_STATE.EXIT;
-import static be.kuleuven.mt_ibai_vlc.common.Enums.ANDROID_STATE.LOADING;
-import static be.kuleuven.mt_ibai_vlc.common.Enums.ANDROID_STATE.RX_ENDED;
-import static be.kuleuven.mt_ibai_vlc.common.Enums.ANDROID_STATE.RX_STARTED;
-import static be.kuleuven.mt_ibai_vlc.common.Enums.ANDROID_STATE.RX_STARTING;
-import static be.kuleuven.mt_ibai_vlc.common.Enums.ANDROID_STATE.TX_ENDED;
-import static be.kuleuven.mt_ibai_vlc.common.Enums.ANDROID_STATE.TX_STARTED;
-import static be.kuleuven.mt_ibai_vlc.common.Enums.ANDROID_STATE.TX_STARTING;
-import static be.kuleuven.mt_ibai_vlc.common.Enums.ANDROID_STATE.WAITING_FOR_CHECK_IN_RX;
-import static be.kuleuven.mt_ibai_vlc.common.Enums.ANDROID_STATE.WAITING_FOR_CHECK_IN_TX;
-import static be.kuleuven.mt_ibai_vlc.common.Enums.ANDROID_STATE.WAITING_FOR_START;
 
 public class MainActivity extends AppCompatActivity implements CustomEventListener {
 
@@ -62,6 +54,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
     private LinearLayout cropLayout;
     private RadioGroup txModeRadioGroup;
     private EditText txDataEditText;
+    private EditText txRateEditText;
     private Button txStartButton;
 
     // Image analysis
@@ -150,7 +143,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
 
         lightSender = new LightSender(preview);
 
-        firebaseInterface.setAndroidState(WAITING_FOR_START); // Setup completed
+        firebaseInterface.setAndroidState(AndroidState.WAITING_FOR_START); // Setup completed
     }
 
     private void updateTransform() {
@@ -218,30 +211,46 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
         cameraView = findViewById(R.id.mainCameraView);
         cropLayout = findViewById(R.id.mainCropLayout);
         txDataEditText = findViewById(R.id.txDataEditText);
+        txRateEditText = findViewById(R.id.txRateEditText);
         txModeRadioGroup = findViewById(R.id.txModeRadioGroup);
         txStartButton = findViewById(R.id.txStartButton);
         txStartButton.setOnClickListener(v -> {
-            if (firebaseInterface.getAndroidState().equals(WAITING_FOR_START)) {
+            if (firebaseInterface.getAndroidState().equals(AndroidState.WAITING_FOR_START)) {
                 if (txDataEditText.getText().toString().isEmpty()) {
                     Toast.makeText(getApplicationContext(), R.string.empty_text,
                             Toast.LENGTH_LONG).show();
+                } else if (txRateEditText.getText().toString().isEmpty()) {
+                    Toast.makeText(getApplicationContext(), R.string.empty_rate,
+                            Toast.LENGTH_LONG).show();
                 } else if (!firebaseInterface.getArduinoState()
-                        .equals(Enums.ARDUINO_STATE.WAITING_FOR_TX_DATA)) {
+                        .equals(ArduinoState.WAITING_FOR_TX_DATA)) {
                     Toast.makeText(getApplicationContext(), R.string.arduino_not_online,
                             Toast.LENGTH_LONG).show();
                 } else {
+                    int txRate;
+                    try {
+                        txRate = Integer.parseInt(txRateEditText.getText().toString());
+                    } catch (NumberFormatException e) {
+                        Toast.makeText(getApplicationContext(), R.string.rate_not_number,
+                                Toast.LENGTH_LONG).show();
+
+                        return;
+                    }
                     String txData = txDataEditText.getText().toString();
-                    Enums.TX_MODE txMode =
+                    TxMode txMode =
                             txModeRadioGroup.getCheckedRadioButtonId() == R.id.txModeArduinoAndroid
-                            ? Enums.TX_MODE.ARDUINO_ANDROID : Enums.TX_MODE.ANDROID_ARDUINO;
-                    Enums.ANDROID_STATE nextState =
-                            txMode.equals(Enums.TX_MODE.ARDUINO_ANDROID) ? WAITING_FOR_CHECK_IN_RX
-                                                                         : WAITING_FOR_CHECK_IN_TX;
+                            ? TxMode.ARDUINO_ANDROID : TxMode.ANDROID_ARDUINO;
+                    AndroidState nextState =
+                            txMode.equals(TxMode.ARDUINO_ANDROID)
+                            ? AndroidState.WAITING_FOR_CHECK_IN_RX
+                            : AndroidState.WAITING_FOR_CHECK_IN_TX;
                     firebaseInterface.setAndroidState(nextState);
                     firebaseInterface.setTxData(txData);
                     firebaseInterface.setTxMode(txMode);
+                    firebaseInterface.setTxRate(txRate);
                     txStartButton.setEnabled(false);
                     txDataEditText.setEnabled(false);
+                    txRateEditText.setEnabled(false);
                 }
             }
         });
@@ -249,17 +258,17 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
 
     private void setupFirebaseData() {
         firebaseInterface = new FirebaseInterface(this);
-        firebaseInterface.setAndroidState(LOADING);
+        firebaseInterface.setAndroidState(AndroidState.LOADING);
         firebaseInterface.setAndroidResult("");
     }
 
     @Override
-    public void onAnalyzerEvent(Enums.ANALYZER_STATE eventCode, @Nullable String info) {
+    public void onAnalyzerEvent(AnalyzerState eventCode, @Nullable String info) {
         String text = info != null ? eventCode + " -> " + info : eventCode.toString();
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
         switch (eventCode) {
             case WAITING:
-                firebaseInterface.setAndroidState(RX_STARTING);
+                firebaseInterface.setAndroidState(AndroidState.RX_STARTING);
                 break;
             case TX_ENDED:
                 endRx();
@@ -268,28 +277,28 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
     }
 
     @Override
-    public void arduinoStateChanged(Enums.ARDUINO_STATE state) {
+    public void arduinoStateChanged(ArduinoState state) {
         switch (state) {
             case WAITING_FOR_CHECK_IN:
                 if (firebaseInterface.getAndroidState()
-                        .equals(Enums.ANDROID_STATE.WAITING_FOR_CHECK_IN_RX)) {
+                        .equals(AndroidState.WAITING_FOR_CHECK_IN_RX)) {
                     startRx();
                 }
                 break;
             case RX_STARTING:
                 if (firebaseInterface.getAndroidState()
-                        .equals(Enums.ANDROID_STATE.WAITING_FOR_CHECK_IN_TX)) {
+                        .equals(AndroidState.WAITING_FOR_CHECK_IN_TX)) {
                     startTx();
                 }
                 break;
             case TX_ENDED:
-                if (firebaseInterface.getAndroidState().equals(RX_STARTING)
-                        || firebaseInterface.getAndroidState().equals(RX_STARTED)) {
+                if (firebaseInterface.getAndroidState().equals(AndroidState.RX_STARTING)
+                        || firebaseInterface.getAndroidState().equals(AndroidState.RX_STARTED)) {
                     endRx();
                 }
                 break;
             case RX_ENDED:
-                if (firebaseInterface.getAndroidState().equals(TX_ENDED)) {
+                if (firebaseInterface.getAndroidState().equals(AndroidState.TX_ENDED)) {
                     endTx();
                 }
                 break;
@@ -306,33 +315,34 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
         String result = analyzer != null ? analyzer.getResult() : "";
         stopAnalysis();
         firebaseInterface.setAndroidResult(result);
-        firebaseInterface.setAndroidState(RX_ENDED);
+        firebaseInterface.setAndroidState(AndroidState.RX_ENDED);
         saveResults();
     }
 
     public void startTx() {
-        firebaseInterface.setAndroidState(TX_STARTING);
+        firebaseInterface.setAndroidState(AndroidState.TX_STARTING);
         initLog();
-        firebaseInterface.setAndroidState(TX_STARTED);
+        firebaseInterface.setAndroidState(AndroidState.TX_STARTED);
         lightSender.blinkWholeSequence(firebaseInterface.getTxData());
-        firebaseInterface.setAndroidState(TX_ENDED);
+        firebaseInterface.setAndroidState(AndroidState.TX_ENDED);
     }
 
     public void endTx() {
-        firebaseInterface.setAndroidState(EXIT);
+        firebaseInterface.setAndroidState(AndroidState.EXIT);
         saveResults();
     }
 
     public void initLog() {
         String txData = firebaseInterface.getTxData();
-        Enums.TX_MODE txMode = firebaseInterface.getTxMode();
+        TxMode txMode = firebaseInterface.getTxMode();
+        long txRate = firebaseInterface.getTxRate();
         long time = System.currentTimeMillis();
-        logItem = new LogItem(txData, time, txMode);
+        logItem = new LogItem(txData, time, txMode, txRate);
     }
 
     public void saveResults() {
         // Obtain results
-        String rxData = firebaseInterface.getTxMode().equals(Enums.TX_MODE.ARDUINO_ANDROID)
+        String rxData = firebaseInterface.getTxMode().equals(TxMode.ARDUINO_ANDROID)
                         ? firebaseInterface.getAndroidResult()
                         : firebaseInterface.getArduinoResult();
         logItem.completeLog(rxData);
@@ -341,7 +351,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
         // Save logs
         firebaseInterface.pushLog(logItem);
         // Finish
-        firebaseInterface.setAndroidState(EXIT);
+        firebaseInterface.setAndroidState(AndroidState.EXIT);
     }
 
     private void printResults() {
@@ -355,10 +365,11 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
     }
 
     private void reset() {
-        firebaseInterface.setAndroidState(WAITING_FOR_START);
+        firebaseInterface.setAndroidState(AndroidState.WAITING_FOR_START);
         firebaseInterface.setAndroidResult("");
         txStartButton.setEnabled(true);
         txDataEditText.setEnabled(true);
+        txRateEditText.setEnabled(false);
     }
 
 }

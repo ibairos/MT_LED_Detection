@@ -2,12 +2,13 @@ package be.kuleuven.mt_ibai_vlc.events;
 
 import androidx.annotation.Nullable;
 
-import be.kuleuven.mt_ibai_vlc.common.Enums;
+import be.kuleuven.mt_ibai_vlc.model.enums.AnalyzerState;
+import be.kuleuven.mt_ibai_vlc.model.enums.ArduinoState;
 
 public interface CustomEventListener {
 
-    void onAnalyzerEvent(Enums.ANALYZER_STATE eventCode, @Nullable String info);
+    void onAnalyzerEvent(AnalyzerState eventCode, @Nullable String info);
 
-    void arduinoStateChanged(Enums.ARDUINO_STATE state);
+    void arduinoStateChanged(ArduinoState state);
 
 }

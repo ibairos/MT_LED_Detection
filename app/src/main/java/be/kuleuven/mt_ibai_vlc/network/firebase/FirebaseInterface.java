@@ -17,9 +17,11 @@ import java.util.Map;
 import java.util.Objects;
 
 import be.kuleuven.mt_ibai_vlc.R;
-import be.kuleuven.mt_ibai_vlc.common.Enums;
 import be.kuleuven.mt_ibai_vlc.events.CustomEventListener;
 import be.kuleuven.mt_ibai_vlc.model.LogItem;
+import be.kuleuven.mt_ibai_vlc.model.enums.AndroidState;
+import be.kuleuven.mt_ibai_vlc.model.enums.ArduinoState;
+import be.kuleuven.mt_ibai_vlc.model.enums.TxMode;
 
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.ANDROID;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.ARDUINO;
@@ -29,6 +31,7 @@ import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.RESULT;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.STATE;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.TX_DATA;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.TX_MODE;
+import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.TX_RATE;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.VARIABLES;
 
 public class FirebaseInterface {
@@ -39,13 +42,14 @@ public class FirebaseInterface {
 
     private DatabaseReference myRef;
 
-    private Enums.ANDROID_STATE androidState;
+    private AndroidState androidState;
     private String androidResult;
-    private Enums.ARDUINO_STATE arduinoState;
+    private ArduinoState arduinoState;
     private String arduinoResult;
 
     private String txData;
-    private Enums.TX_MODE txMode;
+    private TxMode txMode;
+    private long txRate;
 
     public FirebaseInterface(Activity activity) {
         this.activity = activity;
@@ -57,9 +61,9 @@ public class FirebaseInterface {
                     @Override public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
                         androidState = !((String) Objects.requireNonNull(dataSnapshot.getValue()))
                                 .isEmpty() ?
-                                       Enums.ANDROID_STATE.valueOf((String) dataSnapshot.getValue())
+                                       AndroidState.valueOf((String) dataSnapshot.getValue())
                                            :
-                                       Enums.ANDROID_STATE.getDefault();
+                                       AndroidState.getDefault();
                         Log.d(TAG, "AndroidState: " + androidState.toString());
                     }
 
@@ -85,9 +89,9 @@ public class FirebaseInterface {
                     @Override public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
                         arduinoState = !((String) Objects.requireNonNull(dataSnapshot.getValue()))
                                 .isEmpty() ?
-                                       Enums.ARDUINO_STATE.valueOf((String) dataSnapshot.getValue())
+                                       ArduinoState.valueOf((String) dataSnapshot.getValue())
                                            :
-                                       Enums.ARDUINO_STATE.getDefault();
+                                       ArduinoState.getDefault();
                         ((CustomEventListener) activity).arduinoStateChanged(arduinoState);
                         Log.d(TAG, "ArduinoState: " + androidState.toString());
                     }
@@ -113,9 +117,9 @@ public class FirebaseInterface {
                 .addValueEventListener(new ValueEventListener() {
                     @Override public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
                         txMode = !((String) Objects.requireNonNull(dataSnapshot.getValue()))
-                                .isEmpty() ? Enums.TX_MODE.valueOf((String) dataSnapshot.getValue())
-                                           : Enums.TX_MODE.getDefault();
-                        txMode = Enums.TX_MODE.valueOf((String) dataSnapshot.getValue());
+                                .isEmpty() ? TxMode.valueOf((String) dataSnapshot.getValue())
+                                           : TxMode.getDefault();
+                        txMode = TxMode.valueOf((String) dataSnapshot.getValue());
                         Log.d(TAG, "TxMode: " + txMode);
                     }
 
@@ -123,13 +127,24 @@ public class FirebaseInterface {
                         Log.e(TAG, "Failed to read value TxMode");
                     }
                 });
+        myRef.child(VARIABLES).child(COMMON).child(TX_RATE)
+                .addValueEventListener(new ValueEventListener() {
+                    @Override public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                        txRate = (long) dataSnapshot.getValue();
+                        Log.d(TAG, "TxRate: " + txRate);
+                    }
+
+                    @Override public void onCancelled(@NonNull DatabaseError databaseError) {
+                        Log.e(TAG, "Failed to read value TxRate");
+                    }
+                });
     }
 
-    public Enums.ANDROID_STATE getAndroidState() {
+    public AndroidState getAndroidState() {
         return androidState;
     }
 
-    public void setAndroidState(Enums.ANDROID_STATE androidState) {
+    public void setAndroidState(AndroidState androidState) {
         this.androidState = androidState;
         myRef.child(VARIABLES).child(ANDROID).child(STATE)
                 .setValue(androidState.toString());
@@ -146,11 +161,11 @@ public class FirebaseInterface {
                 .setValue(androidResult);
     }
 
-    public Enums.ARDUINO_STATE getArduinoState() {
+    public ArduinoState getArduinoState() {
         return arduinoState;
     }
 
-    public void setArduinoState(Enums.ARDUINO_STATE arduinoState) {
+    public void setArduinoState(ArduinoState arduinoState) {
         this.arduinoState = arduinoState;
         myRef.child(VARIABLES).child(ARDUINO).child(STATE)
                 .setValue(arduinoState.toString());
@@ -176,14 +191,24 @@ public class FirebaseInterface {
                 .setValue(txData);
     }
 
-    public Enums.TX_MODE getTxMode() {
+    public TxMode getTxMode() {
         return txMode;
     }
 
-    public void setTxMode(Enums.TX_MODE txMode) {
+    public void setTxMode(TxMode txMode) {
         this.txMode = txMode;
         myRef.child(VARIABLES).child(COMMON).child(TX_MODE)
                 .setValue(txMode);
+    }
+
+    public long getTxRate() {
+        return txRate;
+    }
+
+    public void setTxRate(long txRate) {
+        this.txRate = txRate;
+        myRef.child(VARIABLES).child(COMMON).child(TX_RATE)
+                .setValue(txRate);
     }
 
     public void pushLog(LogItem logItem) {

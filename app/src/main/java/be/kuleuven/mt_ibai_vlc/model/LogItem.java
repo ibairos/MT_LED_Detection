@@ -7,7 +7,8 @@ import org.apache.commons.text.similarity.JaroWinklerDistance;
 import java.util.HashMap;
 import java.util.Map;
 
-import be.kuleuven.mt_ibai_vlc.common.Enums;
+import be.kuleuven.mt_ibai_vlc.model.enums.TxMode;
+
 
 public class LogItem {
 
@@ -21,13 +22,16 @@ public class LogItem {
 
     private long time;
 
-    private Enums.TX_MODE tx_mode;
+    private TxMode tx_mode;
+
+    private long tx_rate;
 
     public LogItem(String tx_data, long time,
-                   Enums.TX_MODE tx_mode) {
+                   TxMode tx_mode, long tx_rate) {
         this.tx_data = tx_data;
         this.time = time;
         this.tx_mode = tx_mode;
+        this.tx_rate = tx_rate;
     }
 
     @Exclude
@@ -39,6 +43,7 @@ public class LogItem {
         result.put("rx_data", rx_data);
         result.put("time", time);
         result.put("tx_mode", tx_mode);
+        result.put("tx_rate", tx_rate);
 
         return result;
     }
@@ -63,8 +68,16 @@ public class LogItem {
         return time;
     }
 
-    public Enums.TX_MODE getTx_mode() {
+    public TxMode getTx_mode() {
         return tx_mode;
+    }
+
+    public long getTx_rate() {
+        return tx_rate;
+    }
+
+    public void setTx_rate(long tx_rate) {
+        this.tx_rate = tx_rate;
     }
 
     public void completeLog(String rx_data) {

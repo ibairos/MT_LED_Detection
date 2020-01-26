@@ -19,8 +19,8 @@ import java.util.BitSet;
 import java.util.OptionalDouble;
 import java.util.concurrent.TimeUnit;
 
-import be.kuleuven.mt_ibai_vlc.common.Enums.ANALYZER_STATE;
 import be.kuleuven.mt_ibai_vlc.events.CustomEventListener;
+import be.kuleuven.mt_ibai_vlc.model.enums.AnalyzerState;
 
 public class LightReceiver implements ImageAnalysis.Analyzer {
 
@@ -58,7 +58,7 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
     private static final BitSet END_SEQ = BitSet.valueOf(new long[]{0b11111111});
     private static double luminosityTolerance;
     // Runtime variables
-    private ANALYZER_STATE TXState;
+    private AnalyzerState TXState;
     private long lastAnalyzedTimestamp;
     private double initialLumAverage;
     private ArrayList<Double> lastLuminosityValues;
@@ -89,8 +89,8 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
         resultBuffer = new BitSet();
         charBuffer.clear();
         result = "";
-        TXState = ANALYZER_STATE.LOADING;
-        ((CustomEventListener) activity).onAnalyzerEvent(ANALYZER_STATE.LOADING, null);
+        TXState = AnalyzerState.LOADING;
+        ((CustomEventListener) activity).onAnalyzerEvent(AnalyzerState.LOADING, null);
     }
 
     /**
@@ -142,9 +142,9 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                                 luminosityTolerance = (double) luminosityToleranceTable[i].second;
                             }
                         }
-                        TXState = ANALYZER_STATE.WAITING;
+                        TXState = AnalyzerState.WAITING;
                         activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                                .onAnalyzerEvent(ANALYZER_STATE.WAITING, null));
+                                .onAnalyzerEvent(AnalyzerState.WAITING, null));
                     }
                     break;
 
@@ -154,9 +154,9 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                         //&& lastFrameLum / windowLumAverage < WINDOW_TOLERANCE) {
                         charBuffer.set(syncCharIndex);
                         syncCharIndex++;
-                        TXState = ANALYZER_STATE.STARTING;
+                        TXState = AnalyzerState.STARTING;
                         activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                                .onAnalyzerEvent(ANALYZER_STATE.STARTING, null));
+                                .onAnalyzerEvent(AnalyzerState.STARTING, null));
                     }
                     break;
 
@@ -172,9 +172,9 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                                     "COMP - CB - " + new Gson().toJson(charBuffer.toLongArray()));
                             Log.e(TAG, "COMP - SS - " + new Gson().toJson(START_SEQ.toLongArray()));
                             if (charBuffer.equals(START_SEQ)) {
-                                TXState = ANALYZER_STATE.TX_STARTED;
+                                TXState = AnalyzerState.TX_STARTED;
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                                        .onAnalyzerEvent(ANALYZER_STATE.TX_STARTED, null));
+                                        .onAnalyzerEvent(AnalyzerState.TX_STARTED, null));
                             } else {
                                 Log.i(TAG, TXState.toString() + " - START_SEQ - Wrong -> " +
                                         Integer.toBinaryString((int) charBuffer.toLongArray()[0]));
@@ -191,9 +191,9 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                                 syncSeqNum = 0;
                                 syncCharIndex = 0;
                                 charBuffer.clear();
-                                TXState = ANALYZER_STATE.WAITING;
+                                TXState = AnalyzerState.WAITING;
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                                        .onAnalyzerEvent(ANALYZER_STATE.WAITING, null));
+                                        .onAnalyzerEvent(AnalyzerState.WAITING, null));
                             }
                         } else {
                             syncCharIndex++;
@@ -221,9 +221,9 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                                 charBuffer.clear();
                             } else {
                                 // Send last event
-                                TXState = ANALYZER_STATE.TX_ENDED;
+                                TXState = AnalyzerState.TX_ENDED;
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                                        .onAnalyzerEvent(ANALYZER_STATE.TX_ENDED,
+                                        .onAnalyzerEvent(AnalyzerState.TX_ENDED,
                                                 new Gson().toJson(result)));
                             }
                         }
