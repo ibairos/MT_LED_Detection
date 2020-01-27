@@ -1,9 +1,9 @@
 package be.kuleuven.mt_ibai_vlc.model.enums;
 
 public enum TxMode {
-    ARDUINO_ANDROID, ANDROID_ARDUINO;
+    MICRO_ANDROID, ANDROID_MICRO;
 
     public static TxMode getDefault() {
-        return ARDUINO_ANDROID;
+        return MICRO_ANDROID;
     }
 }

@@ -34,7 +34,7 @@ import be.kuleuven.mt_ibai_vlc.events.CustomEventListener;
 import be.kuleuven.mt_ibai_vlc.model.LogItem;
 import be.kuleuven.mt_ibai_vlc.model.enums.AnalyzerState;
 import be.kuleuven.mt_ibai_vlc.model.enums.AndroidState;
-import be.kuleuven.mt_ibai_vlc.model.enums.ArduinoState;
+import be.kuleuven.mt_ibai_vlc.model.enums.MicroState;
 import be.kuleuven.mt_ibai_vlc.model.enums.TxMode;
 import be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseInterface;
 import be.kuleuven.mt_ibai_vlc.network.vlc.receiver.LightReceiver;
@@ -222,9 +222,9 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
                 } else if (txRateEditText.getText().toString().isEmpty()) {
                     Toast.makeText(getApplicationContext(), R.string.empty_rate,
                             Toast.LENGTH_LONG).show();
-                } else if (!firebaseInterface.getArduinoState()
-                        .equals(ArduinoState.WAITING_FOR_TX_DATA)) {
-                    Toast.makeText(getApplicationContext(), R.string.arduino_not_online,
+                } else if (!firebaseInterface.getMicroState()
+                        .equals(MicroState.WAITING_FOR_TX_DATA)) {
+                    Toast.makeText(getApplicationContext(), R.string.micro_not_online,
                             Toast.LENGTH_LONG).show();
                 } else {
                     int txRate;
@@ -238,10 +238,10 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
                     }
                     String txData = txDataEditText.getText().toString();
                     TxMode txMode =
-                            txModeRadioGroup.getCheckedRadioButtonId() == R.id.txModeArduinoAndroid
-                            ? TxMode.ARDUINO_ANDROID : TxMode.ANDROID_ARDUINO;
+                            txModeRadioGroup.getCheckedRadioButtonId() == R.id.txModeMicroAndroid
+                            ? TxMode.MICRO_ANDROID : TxMode.ANDROID_MICRO;
                     AndroidState nextState =
-                            txMode.equals(TxMode.ARDUINO_ANDROID)
+                            txMode.equals(TxMode.MICRO_ANDROID)
                             ? AndroidState.WAITING_FOR_CHECK_IN_RX
                             : AndroidState.WAITING_FOR_CHECK_IN_TX;
                     firebaseInterface.setAndroidState(nextState);
@@ -277,7 +277,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
     }
 
     @Override
-    public void arduinoStateChanged(ArduinoState state) {
+    public void microStateChanged(MicroState state) {
         switch (state) {
             case WAITING_FOR_CHECK_IN:
                 if (firebaseInterface.getAndroidState()
@@ -342,9 +342,9 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
 
     public void saveResults() {
         // Obtain results
-        String rxData = firebaseInterface.getTxMode().equals(TxMode.ARDUINO_ANDROID)
+        String rxData = firebaseInterface.getTxMode().equals(TxMode.MICRO_ANDROID)
                         ? firebaseInterface.getAndroidResult()
-                        : firebaseInterface.getArduinoResult();
+                        : firebaseInterface.getMicroResult();
         logItem.completeLog(rxData);
         // Print them
         printResults();

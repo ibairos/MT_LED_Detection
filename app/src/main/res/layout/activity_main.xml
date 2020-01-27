@@ -80,17 +80,17 @@
                 android:layout_height="wrap_content">
 
                 <RadioButton
-                    android:id="@+id/txModeArduinoAndroid"
+                    android:id="@+id/txModeMicroAndroid"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checked="true"
-                    android:text="@string/arduino_android" />
+                    android:text="@string/micro_android" />
 
                 <RadioButton
-                    android:id="@+id/txModeAndroidArduino"
+                    android:id="@+id/txModeAndroidMicro"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/android_arduino" />
+                    android:text="@string/android_micro" />
             </RadioGroup>
 
         </LinearLayout>

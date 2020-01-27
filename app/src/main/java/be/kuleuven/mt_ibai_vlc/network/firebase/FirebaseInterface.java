@@ -20,11 +20,11 @@ import be.kuleuven.mt_ibai_vlc.R;
 import be.kuleuven.mt_ibai_vlc.events.CustomEventListener;
 import be.kuleuven.mt_ibai_vlc.model.LogItem;
 import be.kuleuven.mt_ibai_vlc.model.enums.AndroidState;
-import be.kuleuven.mt_ibai_vlc.model.enums.ArduinoState;
+import be.kuleuven.mt_ibai_vlc.model.enums.MicroState;
 import be.kuleuven.mt_ibai_vlc.model.enums.TxMode;
 
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.ANDROID;
-import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.ARDUINO;
+import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.MICRO;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.COMMON;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.LOGS;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.RESULT;
@@ -44,8 +44,8 @@ public class FirebaseInterface {
 
     private AndroidState androidState;
     private String androidResult;
-    private ArduinoState arduinoState;
-    private String arduinoResult;
+    private MicroState microState;
+    private String microResult;
 
     private String txData;
     private TxMode txMode;
@@ -84,20 +84,20 @@ public class FirebaseInterface {
                     }
                 });
 
-        myRef.child(VARIABLES).child(ARDUINO).child(STATE)
+        myRef.child(VARIABLES).child(MICRO).child(STATE)
                 .addValueEventListener(new ValueEventListener() {
                     @Override public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                        arduinoState = !((String) Objects.requireNonNull(dataSnapshot.getValue()))
+                        microState = !((String) Objects.requireNonNull(dataSnapshot.getValue()))
                                 .isEmpty() ?
-                                       ArduinoState.valueOf((String) dataSnapshot.getValue())
+                                     MicroState.valueOf((String) dataSnapshot.getValue())
                                            :
-                                       ArduinoState.getDefault();
-                        ((CustomEventListener) activity).arduinoStateChanged(arduinoState);
-                        Log.d(TAG, "ArduinoState: " + androidState.toString());
+                                     MicroState.getDefault();
+                        ((CustomEventListener) activity).microStateChanged(microState);
+                        Log.d(TAG, "MicroState: " + androidState.toString());
                     }
 
                     @Override public void onCancelled(@NonNull DatabaseError databaseError) {
-                        Log.e(TAG, "Failed to read value ArduinoState");
+                        Log.e(TAG, "Failed to read value MicroState");
                     }
                 });
 
@@ -161,24 +161,24 @@ public class FirebaseInterface {
                 .setValue(androidResult);
     }
 
-    public ArduinoState getArduinoState() {
-        return arduinoState;
+    public MicroState getMicroState() {
+        return microState;
     }
 
-    public void setArduinoState(ArduinoState arduinoState) {
-        this.arduinoState = arduinoState;
-        myRef.child(VARIABLES).child(ARDUINO).child(STATE)
-                .setValue(arduinoState.toString());
+    public void setMicroState(MicroState microState) {
+        this.microState = microState;
+        myRef.child(VARIABLES).child(MICRO).child(STATE)
+                .setValue(microState.toString());
     }
 
-    public String getArduinoResult() {
-        return arduinoResult;
+    public String getMicroResult() {
+        return microResult;
     }
 
-    public void setArduinoResult(String arduinoResult) {
-        this.arduinoResult = arduinoResult;
+    public void setMicroResult(String microResult) {
+        this.microResult = microResult;
         myRef.child(VARIABLES).child(ANDROID).child(RESULT)
-                .setValue(arduinoResult);
+                .setValue(microResult);
     }
 
     public String getTxData() {

@@ -4,7 +4,7 @@ class FirebaseEndpoints {
 
     static final String VARIABLES = "variables";
     static final String ANDROID = "android";
-    static final String ARDUINO = "arduino";
+    static final String MICRO = "micro";
     static final String STATE = "state";
     static final String RESULT = "tx_result";
     static final String LOGS = "logs";

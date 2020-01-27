@@ -8,8 +8,8 @@
     <string name="tx_data_text_hint">Text to transmit</string>
     <string name="tx_mode">Transmission mode</string>
     <string name="tx_rate">Rate (bps)</string>
-    <string name="arduino_android">Arduino-Android</string>
-    <string name="android_arduino">Android-Arduino</string>
+    <string name="micro_android">Micro-Android</string>
+    <string name="android_micro">Android-Micro</string>
     <string name="tx_config">Transmission configuration</string>
     <string name="tx_results">Transmission results</string>
     <string name="rx_data">Received text</string>
@@ -20,7 +20,7 @@
     <string name="reset">Reset</string>
 
     <!-- Toasts -->
-    <string name="arduino_not_online">Arduino is not online!</string>
+    <string name="micro_not_online">Micro is not online!</string>
     <string name="empty_text">Empty text!</string>
     <string name="empty_rate">Empty rate!</string>
     <string name="rate_not_number">Rate is not a number!</string>
