@@ -28,6 +28,7 @@ import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.MICRO;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.COMMON;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.LOGS;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.RESULT;
+import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.SAMPLE_NUM;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.STATE;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.TX_DATA;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.TX_MODE;
@@ -50,6 +51,7 @@ public class FirebaseInterface {
     private String txData;
     private TxMode txMode;
     private long txRate;
+    private long numberOfSamples;
 
     public FirebaseInterface(Activity activity) {
         this.activity = activity;
@@ -101,6 +103,18 @@ public class FirebaseInterface {
                     }
                 });
 
+        myRef.child(VARIABLES).child(MICRO).child(RESULT)
+                .addValueEventListener(new ValueEventListener() {
+                    @Override public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                        microResult = (String) dataSnapshot.getValue();
+                        Log.d(TAG, "MicroResult: " + microResult);
+                    }
+
+                    @Override public void onCancelled(@NonNull DatabaseError databaseError) {
+                        Log.e(TAG, "Failed to read value MicroResult");
+                    }
+                });
+
         myRef.child(VARIABLES).child(COMMON).child(TX_DATA)
                 .addValueEventListener(new ValueEventListener() {
                     @Override public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
@@ -136,6 +150,17 @@ public class FirebaseInterface {
 
                     @Override public void onCancelled(@NonNull DatabaseError databaseError) {
                         Log.e(TAG, "Failed to read value TxRate");
+                    }
+                });
+        myRef.child(VARIABLES).child(COMMON).child(SAMPLE_NUM)
+                .addValueEventListener(new ValueEventListener() {
+                    @Override public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                        numberOfSamples = (long) dataSnapshot.getValue();
+                        Log.d(TAG, "NumberOfSamples: " + numberOfSamples);
+                    }
+
+                    @Override public void onCancelled(@NonNull DatabaseError databaseError) {
+                        Log.e(TAG, "Failed to read value NumberOfSamples");
                     }
                 });
     }
@@ -209,6 +234,16 @@ public class FirebaseInterface {
         this.txRate = txRate;
         myRef.child(VARIABLES).child(COMMON).child(TX_RATE)
                 .setValue(txRate);
+    }
+
+    public long getNumberOfSamples() {
+        return numberOfSamples;
+    }
+
+    public void setNumberOfSamples(long numberOfSamples) {
+        this.numberOfSamples = numberOfSamples;
+        myRef.child(VARIABLES).child(COMMON).child(SAMPLE_NUM)
+                .setValue(numberOfSamples);
     }
 
     public void pushLog(LogItem logItem) {

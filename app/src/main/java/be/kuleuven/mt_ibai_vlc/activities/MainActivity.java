@@ -1,9 +1,11 @@
 package be.kuleuven.mt_ibai_vlc.activities;
 
+import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.os.Bundle;
+import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
 import android.view.TextureView;
@@ -18,6 +20,8 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.AspectRatio;
+import androidx.camera.core.CameraInfoUnavailableException;
 import androidx.camera.core.CameraX;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageAnalysisConfig;
@@ -25,6 +29,8 @@ import androidx.camera.core.Preview;
 import androidx.camera.core.PreviewConfig;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+
+import com.google.gson.Gson;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -43,19 +49,27 @@ import be.kuleuven.mt_ibai_vlc.network.vlc.sender.LightSender;
 
 public class MainActivity extends AppCompatActivity implements CustomEventListener {
 
+    // TAG
+    private static final String TAG = "MainActivity";
+    // Resolution
+    private static final int IMAGE_WIDTH = 640;
+    private static final int IMAGE_HEIGHT = 480;
     // Camera permissions
     private final String[] REQUIRED_PERMISSIONS = new String[]{"android.permission.CAMERA",
             "android.permission.WRITE_EXTERNAL_STORAGE"};
     // Activity instance
     private int REQUEST_CODE_PERMISSIONS = 101;
-
     // Views and layouts
     private TextureView cameraView;
     private LinearLayout cropLayout;
     private RadioGroup txModeRadioGroup;
     private EditText txDataEditText;
     private EditText txRateEditText;
+    private EditText numberOfSamplesEditText;
     private Button txStartButton;
+
+    private TextView txResultTextView;
+    private TextView txAccuracyTextView;
 
     // Image analysis
     private ImageAnalysis imageAnalysis;
@@ -69,6 +83,14 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
 
     // LogItem
     private LogItem logItem;
+
+    public static void cancelFocus() {
+        try {
+            CameraX.getCameraControl(CameraX.LensFacing.BACK).cancelFocusAndMetering();
+        } catch (CameraInfoUnavailableException ignored) {
+
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -104,22 +126,25 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
         }
     }
 
-    private void startCamera() {
+    @SuppressLint("RestrictedApi") private void startCamera() {
         CameraX.unbindAll();
 
         // Size of the screen
-        Size screen = new Size(cameraView.getWidth(), cameraView.getHeight());
+        Size screen = new Size(IMAGE_WIDTH, IMAGE_HEIGHT);
 
         PreviewConfig pConfig =
                 new PreviewConfig
                         .Builder()
-                        .setTargetResolution(screen)
+                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                        //.setTargetResolution(screen)
                         .build();
         Preview preview = new Preview(pConfig);
+
 
         // To update the surface texture we  have to destroy it first then re-add it
         preview.setOnPreviewOutputUpdateListener(
                 output -> {
+                    cancelFocus();
                     ViewGroup parent = (ViewGroup) cameraView.getParent();
                     parent.removeView(cameraView);
                     parent.addView(cameraView, 0);
@@ -132,16 +157,18 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
         ImageAnalysisConfig aConfig =
                 new ImageAnalysisConfig
                         .Builder()
-                        .setTargetResolution(screen)
+                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                        //.setTargetResolution(screen)
                         .setImageReaderMode(ImageAnalysis.ImageReaderMode.ACQUIRE_LATEST_IMAGE)
                         .build();
 
         imageAnalysis = new ImageAnalysis(aConfig);
 
+
         // Bind to lifecycle
         CameraX.bindToLifecycle(this, preview, imageAnalysis);
 
-        lightSender = new LightSender(preview);
+        lightSender = new LightSender(preview, firebaseInterface, this);
 
         firebaseInterface.setAndroidState(AndroidState.WAITING_FOR_START); // Setup completed
     }
@@ -193,12 +220,17 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
         if (imageAnalysis.getAnalyzer() != null) {
             imageAnalysis.removeAnalyzer();
         }
-        Rect cropRect = new Rect((int) cropLayout.getX(), (int) cropLayout.getY(),
-                (int) cropLayout.getX() + cropLayout.getWidth(),
-                (int) cropLayout.getY() + cropLayout.getHeight());
+        Rect cropRect = new Rect((int) (cropLayout.getX() / cameraView.getWidth() * IMAGE_WIDTH),
+                (int) (cropLayout.getY() / cameraView.getHeight() * IMAGE_HEIGHT),
+                (int) ((cropLayout.getX() + cropLayout.getWidth()) / cameraView.getWidth() *
+                        IMAGE_WIDTH),
+                (int) ((cropLayout.getY() + cropLayout.getHeight()) / cameraView.getHeight() *
+                        IMAGE_HEIGHT));
         LightReceiver analyzer = new LightReceiver(this, cropRect,
-                cameraView.getWidth());
+                cameraView.getWidth(), firebaseInterface.getTxRate(),
+                firebaseInterface.getNumberOfSamples());
         imageAnalysis.setAnalyzer(executor, analyzer);
+
     }
 
     private void stopAnalysis() {
@@ -212,6 +244,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
         cropLayout = findViewById(R.id.mainCropLayout);
         txDataEditText = findViewById(R.id.txDataEditText);
         txRateEditText = findViewById(R.id.txRateEditText);
+        numberOfSamplesEditText = findViewById(R.id.samplingRateEditText);
         txModeRadioGroup = findViewById(R.id.txModeRadioGroup);
         txStartButton = findViewById(R.id.txStartButton);
         txStartButton.setOnClickListener(v -> {
@@ -220,7 +253,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
                     Toast.makeText(getApplicationContext(), R.string.empty_text,
                             Toast.LENGTH_LONG).show();
                 } else if (txRateEditText.getText().toString().isEmpty()) {
-                    Toast.makeText(getApplicationContext(), R.string.empty_rate,
+                    Toast.makeText(getApplicationContext(), R.string.empty_sampling_rate,
                             Toast.LENGTH_LONG).show();
                 } else if (!firebaseInterface.getMicroState()
                         .equals(MicroState.WAITING_FOR_TX_DATA)) {
@@ -240,6 +273,27 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
                     TxMode txMode =
                             txModeRadioGroup.getCheckedRadioButtonId() == R.id.txModeMicroAndroid
                             ? TxMode.MICRO_ANDROID : TxMode.ANDROID_MICRO;
+                    int numberOfSamples;
+                    if (txMode == TxMode.MICRO_ANDROID) {
+                        if (numberOfSamplesEditText.getText().toString().isEmpty()) {
+                            Toast.makeText(getApplicationContext(), R.string.empty_rate,
+                                    Toast.LENGTH_LONG).show();
+                            return;
+                        }
+                        try {
+                            numberOfSamples =
+                                    Integer.parseInt(numberOfSamplesEditText.getText().toString());
+                        } catch (NumberFormatException e) {
+                            Toast.makeText(getApplicationContext(),
+                                    R.string.sampling_rate_not_number,
+                                    Toast.LENGTH_LONG).show();
+                            return;
+                        }
+                    } else {
+                        numberOfSamples = 1;
+                    }
+
+
                     AndroidState nextState =
                             txMode.equals(TxMode.MICRO_ANDROID)
                             ? AndroidState.WAITING_FOR_CHECK_IN_RX
@@ -248,12 +302,22 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
                     firebaseInterface.setTxData(txData);
                     firebaseInterface.setTxMode(txMode);
                     firebaseInterface.setTxRate(txRate);
+                    firebaseInterface.setNumberOfSamples(numberOfSamples);
                     txStartButton.setEnabled(false);
                     txDataEditText.setEnabled(false);
                     txRateEditText.setEnabled(false);
+                    numberOfSamplesEditText.setEnabled(false);
                 }
             }
         });
+        findViewById(R.id.resetButton).setOnClickListener(v -> {
+            reset();
+        });
+        txModeRadioGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            numberOfSamplesEditText.setEnabled(checkedId == R.id.txModeMicroAndroid);
+        });
+        txResultTextView = findViewById(R.id.txResultTextView);
+        txAccuracyTextView = findViewById(R.id.txAccuracyTextView);
     }
 
     private void setupFirebaseData() {
@@ -285,7 +349,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
                     startRx();
                 }
                 break;
-            case RX_STARTING:
+            case RX_WAITING:
                 if (firebaseInterface.getAndroidState()
                         .equals(AndroidState.WAITING_FOR_CHECK_IN_TX)) {
                     startTx();
@@ -298,6 +362,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
                 }
                 break;
             case RX_ENDED:
+            case EXIT:
                 if (firebaseInterface.getAndroidState().equals(AndroidState.TX_ENDED)) {
                     endTx();
                 }
@@ -323,12 +388,13 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
         firebaseInterface.setAndroidState(AndroidState.TX_STARTING);
         initLog();
         firebaseInterface.setAndroidState(AndroidState.TX_STARTED);
-        lightSender.blinkWholeSequence(firebaseInterface.getTxData());
-        firebaseInterface.setAndroidState(AndroidState.TX_ENDED);
+        lightSender.setParams(firebaseInterface.getTxData(), firebaseInterface.getTxRate());
+
+        new Thread(lightSender).start();
+
     }
 
     public void endTx() {
-        firebaseInterface.setAndroidState(AndroidState.EXIT);
         saveResults();
     }
 
@@ -336,8 +402,9 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
         String txData = firebaseInterface.getTxData();
         TxMode txMode = firebaseInterface.getTxMode();
         long txRate = firebaseInterface.getTxRate();
+        long numberOfSamples = firebaseInterface.getNumberOfSamples();
         long time = System.currentTimeMillis();
-        logItem = new LogItem(txData, time, txMode, txRate);
+        logItem = new LogItem(txData, time, txMode, txRate, numberOfSamples);
     }
 
     public void saveResults() {
@@ -352,24 +419,38 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
         firebaseInterface.pushLog(logItem);
         // Finish
         firebaseInterface.setAndroidState(AndroidState.EXIT);
+        Log.e(TAG, "'" + rxData + "'" + new Gson().toJson(logItem));
     }
 
     private void printResults() {
-        ((TextView) findViewById(R.id.txResultTextView)).setText(logItem.getRx_data());
-        ((TextView) findViewById(R.id.txAccuracyTextView))
-                .setText(String.format(
-                        getResources().getConfiguration().getLocales().get(0),
-                        "%.3f",
-                        logItem.getAccuracy())
-                );
+        txResultTextView.setText(logItem.getRx_data());
+        txAccuracyTextView.setText(
+                String.format(getResources().getConfiguration().getLocales().get(0), "%.3f",
+                        logItem.getAccuracy()));
     }
 
     private void reset() {
         firebaseInterface.setAndroidState(AndroidState.WAITING_FOR_START);
         firebaseInterface.setAndroidResult("");
+        if (firebaseInterface.getMicroState() == MicroState.EXIT
+                || firebaseInterface.getMicroState() == MicroState.RX_WAITING
+                || firebaseInterface.getMicroState() == MicroState.RX_STARTING
+                || firebaseInterface.getMicroState() == MicroState.RX_STARTED) {
+            firebaseInterface.setMicroState(MicroState.LOADING);
+        }
+        txResultTextView.setText(R.string.no_info);
+        txAccuracyTextView.setText(R.string.no_info);
         txStartButton.setEnabled(true);
         txDataEditText.setEnabled(true);
-        txRateEditText.setEnabled(false);
+        txRateEditText.setEnabled(true);
+        numberOfSamplesEditText
+                .setEnabled(txModeRadioGroup.getCheckedRadioButtonId() == R.id.txModeMicroAndroid);
+        if (firebaseInterface.getTxMode() == TxMode.MICRO_ANDROID) {
+            stopAnalysis();
+        } else {
+            lightSender.setEnabled(false);
+        }
+
     }
 
 }

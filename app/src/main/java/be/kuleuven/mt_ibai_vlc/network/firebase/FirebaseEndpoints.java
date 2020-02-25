@@ -12,4 +12,5 @@ class FirebaseEndpoints {
     static final String TX_DATA = "tx_data";
     static final String TX_MODE = "tx_mode";
     static final String TX_RATE = "tx_rate";
+    static final String SAMPLE_NUM = "sample_num";
 }

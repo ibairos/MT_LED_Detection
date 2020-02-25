@@ -50,9 +50,20 @@
             android:hint="@string/tx_rate"
             android:importantForAutofill="no"
             android:inputType="number"
-            app:layout_constraintBottom_toBottomOf="@+id/txDataEditText"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="@+id/txDataEditText" />
+
+        <EditText
+            android:id="@+id/samplingRateEditText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ems="6"
+            android:enabled="true"
+            android:hint="@string/sample_num"
+            android:importantForAutofill="no"
+            android:inputType="numberDecimal"
+            app:layout_constraintEnd_toEndOf="@+id/txRateEditText"
+            app:layout_constraintTop_toBottomOf="@+id/txRateEditText" />
 
         <LinearLayout
             android:id="@+id/txModeLayout"
@@ -61,8 +72,10 @@
             android:orientation="horizontal"
             app:layout_constraintBottom_toTopOf="@+id/buttonsLinearLayout"
             app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.075"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/txDataEditText"
+            app:layout_constraintVertical_bias="0.5"
             tools:ignore="UselessParent">
 
             <TextView
@@ -91,6 +104,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/android_micro" />
+
             </RadioGroup>
 
         </LinearLayout>
@@ -234,8 +248,8 @@
 
         <LinearLayout
             android:id="@+id/mainCropLayout"
-            android:layout_width="75dp"
-            android:layout_height="75dp"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
             android:background="@drawable/custom_border"
             android:orientation="vertical"
             app:layout_constraintBottom_toBottomOf="@+id/mainCameraView"

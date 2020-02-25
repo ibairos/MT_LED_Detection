@@ -26,8 +26,10 @@ public class LogItem {
 
     private long tx_rate;
 
+    private long sample_num;
+
     public LogItem(String tx_data, long time,
-                   TxMode tx_mode, long tx_rate) {
+                   TxMode tx_mode, long tx_rate, long sample_num) {
         this.tx_data = tx_data;
         this.time = time;
         this.tx_mode = tx_mode;
@@ -44,6 +46,7 @@ public class LogItem {
         result.put("time", time);
         result.put("tx_mode", tx_mode);
         result.put("tx_rate", tx_rate);
+        result.put("sample_num", sample_num);
 
         return result;
     }
@@ -80,6 +83,14 @@ public class LogItem {
         this.tx_rate = tx_rate;
     }
 
+    public long getSample_num() {
+        return sample_num;
+    }
+
+    public void setSample_num(long sample_num) {
+        this.sample_num = sample_num;
+    }
+
     public void completeLog(String rx_data) {
         this.rx_data = rx_data;
         elapsed_time = System.currentTimeMillis() - time;
@@ -88,7 +99,9 @@ public class LogItem {
 
     private void calculateAccuracy() {
         JaroWinklerDistance jaroWinklerDistance = new JaroWinklerDistance();
-        accuracy = jaroWinklerDistance.apply(tx_data, rx_data);
+        accuracy =
+                rx_data != null && !rx_data.isEmpty() ? jaroWinklerDistance.apply(tx_data, rx_data)
+                                                      : 0;
     }
 
 }

@@ -17,7 +17,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.OptionalDouble;
-import java.util.concurrent.TimeUnit;
 
 import be.kuleuven.mt_ibai_vlc.events.CustomEventListener;
 import be.kuleuven.mt_ibai_vlc.model.enums.AnalyzerState;
@@ -30,31 +29,33 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
     // Constant parameters
     private static final Pair[] luminosityToleranceTable =
             new Pair[]{
-                    new Pair<>(80, 1.4),
-                    new Pair<>(90, 1.3),
-                    new Pair<>(100, 1.2),
-                    new Pair<>(110, 1.175),
-                    new Pair<>(120, 1.15),
-                    new Pair<>(130, 1.125),
-                    new Pair<>(140, 1.1),
-                    new Pair<>(150, 1.075),
-                    new Pair<>(Double.MAX_VALUE, 1.05)
+                    new Pair<>(80.0, 1.2),
+                    new Pair<>(90.0, 1.175),
+                    new Pair<>(100.0, 1.15),
+                    new Pair<>(110.0, 1.125),
+                    new Pair<>(120.0, 1.1),
+                    new Pair<>(130.0, 1.075),
+                    new Pair<>(140.0, 1.05),
+                    new Pair<>(150.0, 1.025),
+                    new Pair<>(Double.MAX_VALUE, 1.01)
             };
-    private static final double FRAME_RATE_SECONDS = 8;
-    private static final double SECOND_TO_NANOSECOND_RATIO = 1000000000;
-    private static final int UPDATE_RATE_LED_SECONDS = 2;
-    private static final double FRAME_RATE_NANOSECONDS =
-            FRAME_RATE_SECONDS / SECOND_TO_NANOSECOND_RATIO;
-    private static final long
-            TIME_PER_FRAME_MILLIS =
-            TimeUnit.NANOSECONDS.toMillis((long) (1 / FRAME_RATE_NANOSECONDS));
+    //private static final double FRAME_RATE_SECONDS = 8;
+    //private static final double SECOND_TO_NANOSECOND_RATIO = 1000000000;
+    //private static final int UPDATE_RATE_LED_SECONDS = 2;
+    //private static final double FRAME_RATE_NANOSECONDS =
+    //        FRAME_RATE_SECONDS / SECOND_TO_NANOSECOND_RATIO;
+    //private static final long
+    //        TIME_PER_FRAME_MILLIS =
+    //        TimeUnit.NANOSECONDS.toMillis((long) (1 / FRAME_RATE_NANOSECONDS));
     private static final double FRAME_RATE_TOLERANCE = 0.9;
-    private static final int SLIDING_WINDOW_SIZE =
-            (int) (FRAME_RATE_SECONDS / UPDATE_RATE_LED_SECONDS);
+    //private static final int SLIDING_WINDOW_SIZE =
+    //        (int) (FRAME_RATE_SECONDS / UPDATE_RATE_LED_SECONDS);
     //private static final double WINDOW_TOLERANCE = 1 + 1 / (double) SLIDING_WINDOW_SIZE;
+
     private static final int CHAR_SIZE = 8; // UTF-8
+
     // Control sequences
-    private static final BitSet START_SEQ = BitSet.valueOf(new long[]{0b11100111});
+    private static final BitSet START_SEQ = BitSet.valueOf(new long[]{0b11111111});
     private static final BitSet END_SEQ = BitSet.valueOf(new long[]{0b11111111});
     private static double luminosityTolerance;
     // Runtime variables
@@ -79,10 +80,21 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
     private Rect cropRect;
     private int imageWidth;
 
-    public LightReceiver(Activity activity, Rect cropRect, int imageWidth) {
+    // Variable rates
+    private long samplingRate;
+    private long timePerFrameMillis;
+
+    public LightReceiver(Activity activity, Rect cropRect, int imageWidth, long txRate,
+                         long samplingRate) {
+        Log.e(TAG, new Gson().toJson(cropRect));
+
         this.activity = activity;
         this.cropRect = cropRect;
         this.imageWidth = imageWidth;
+        this.samplingRate = samplingRate;
+        timePerFrameMillis = 1000 / (samplingRate * txRate); // Input data on seconds
+        Log.i(TAG, "SamplingRate: " + samplingRate);
+        Log.i(TAG, "TimePerFrameMillis: " + timePerFrameMillis);
         lastAnalyzedTimestamp = 0L;
         lastLuminosityValues = new ArrayList<>();
         charBuffer = new BitSet(CHAR_SIZE);
@@ -119,10 +131,10 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
 
         // Calculate the average luminescence no more often than every FRAME_RATE_SECONDS
         if (currentTimestamp - lastAnalyzedTimestamp >=
-                TIME_PER_FRAME_MILLIS * FRAME_RATE_TOLERANCE) {
+                timePerFrameMillis * FRAME_RATE_TOLERANCE) {
 
             // Update timestamp of last analyzed frame
-            long theoreticalTimestamp = lastAnalyzedTimestamp + TIME_PER_FRAME_MILLIS;
+            long theoreticalTimestamp = lastAnalyzedTimestamp + timePerFrameMillis;
             lastAnalyzedTimestamp =
                     lastAnalyzedTimestamp != 0L ? theoreticalTimestamp : currentTimestamp;
 
@@ -135,11 +147,13 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                     OptionalDouble ilm =
                             lastLuminosityValues.stream().mapToDouble(a -> a).average();
                     initialLumAverage = ilm.isPresent() ? ilm.getAsDouble() : 0;
-                    if (lastLuminosityValues.size() == SLIDING_WINDOW_SIZE) {
+                    if (lastLuminosityValues.size() == samplingRate) {
                         for (int i = 0;
                              i < luminosityToleranceTable.length && luminosityTolerance == 0; i++) {
-                            if ((Double) luminosityToleranceTable[i].first >= initialLumAverage) {
+                            if ((double) luminosityToleranceTable[i].first >= initialLumAverage) {
                                 luminosityTolerance = (double) luminosityToleranceTable[i].second;
+                                Log.w(TAG, "ILA: " + initialLumAverage + ", LT: " +
+                                        luminosityTolerance);
                             }
                         }
                         TXState = AnalyzerState.WAITING;
@@ -162,7 +176,7 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
 
                 case STARTING:
                     syncSeqNum++;
-                    if (syncSeqNum % SLIDING_WINDOW_SIZE == 0) {
+                    if (syncSeqNum % samplingRate == 0) {
                         Boolean bitIsOne = bitIsSet(windowLumAverage);
                         if (bitIsOne) {
                             charBuffer.set(Math.toIntExact(syncCharIndex));
@@ -195,6 +209,7 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
                                         .onAnalyzerEvent(AnalyzerState.WAITING, null));
                             }
+                            Log.i(TAG, "SEQ_NUM: " + syncSeqNum);
                         } else {
                             syncCharIndex++;
                         }
@@ -203,12 +218,14 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
 
                 case TX_STARTED:
                     txSeqNum++;
-                    if (txSeqNum > SLIDING_WINDOW_SIZE && txSeqNum % SLIDING_WINDOW_SIZE == 0) {
+                    if (/*txSeqNum > samplingRate && */txSeqNum % samplingRate == 0) {
                         charBuffer.set(txCharIndex, bitIsSet(windowLumAverage));
                         Log.i(TAG, "TXSeq: " + txSeqNum + ", TXChar: " + txCharIndex);
                         txCharIndex++;
                         if (txCharIndex == CHAR_SIZE) {
                             txCharIndex = 0;
+                            Log.i(TAG, new Gson()
+                                    .toJson(Long.toBinaryString(charBuffer.toLongArray()[0])));
                             if (!charBuffer.equals(END_SEQ)) {
                                 for (int i = 0; i < 8; i++) {
                                     resultBuffer.set(result.length() * CHAR_SIZE + i,
@@ -225,6 +242,7 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
                                         .onAnalyzerEvent(AnalyzerState.TX_ENDED,
                                                 new Gson().toJson(result)));
+                                reset();
                             }
                         }
                     }
@@ -244,12 +262,10 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
 
         // Convert the data into an array of pixel values
         OptionalDouble av = data.stream().mapToDouble(a -> a & 0xFF).average();
-        // LogItem the new luminosity value
         double singleLum = av.isPresent() ? av.getAsDouble() : 0;
-        //LogItem.d(TAG, "SingleAverageLum: " + singleLum);
         lastLuminosityValues.add(singleLum);
 
-        if (lastLuminosityValues.size() > SLIDING_WINDOW_SIZE) {
+        if (lastLuminosityValues.size() > samplingRate) {
             lastLuminosityValues.remove(0);
         }
         OptionalDouble od = lastLuminosityValues.stream().mapToDouble(a -> a).average();
@@ -260,13 +276,19 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
     private Boolean bitIsSet(double windowLumAverage) {
         Boolean ret = windowLumAverage / initialLumAverage > luminosityTolerance;
         Log.i(TAG, TXState.toString() + " - BitIsSet: " + ret.toString() + " -> " +
-                (windowLumAverage / initialLumAverage) + " - SCI: " + syncCharIndex);
+                String.format("%.2f", windowLumAverage / initialLumAverage) + "(" +
+                String.format("%.2f", windowLumAverage) + ")" + " - SCI: " + syncCharIndex);
         return ret;
     }
 
     public String getResult() {
         Log.i(TAG, "RESULT_STR -> " + result);
         return result;
+    }
+
+    private void reset() {
+        lastLuminosityValues.clear();
+        initialLumAverage = 0;
     }
 
 }
