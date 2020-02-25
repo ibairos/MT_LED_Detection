@@ -3,7 +3,7 @@ package be.kuleuven.mt_ibai_vlc.network.vlc.sender;
 import android.app.Activity;
 import android.util.Log;
 
-import androidx.camera.core.Preview;
+import androidx.camera.core.CameraControl;
 
 import com.google.gson.Gson;
 
@@ -18,7 +18,8 @@ public class LightSender implements Runnable {
     private static final String TAG = "LightSender";
     private static final BitSet START_SEQ = BitSet.valueOf(new long[]{0b11111111});
     private static final BitSet END_SEQ = BitSet.valueOf(new long[]{0b11111111});
-    private Preview preview;
+
+
     private String sequence;
     private long txRate;
 
@@ -31,9 +32,11 @@ public class LightSender implements Runnable {
     private FirebaseInterface firebaseInterface;
     private Activity activity;
 
-    public LightSender(Preview preview, FirebaseInterface firebaseInterface,
+    private CameraControl cameraControl;
+
+    public LightSender(CameraControl cameraControl, FirebaseInterface firebaseInterface,
                        Activity activity) {
-        this.preview = preview;
+        this.cameraControl = cameraControl;
         this.firebaseInterface = firebaseInterface;
         this.activity = activity;
         enabled = true;
@@ -67,7 +70,7 @@ public class LightSender implements Runnable {
     }
 
     private void torchOff() {
-        preview.enableTorch(false);
+        cameraControl.enableTorch(false);
     }
 
     private void blinkSequence(BitSet sequence, long txRate) {
@@ -87,12 +90,13 @@ public class LightSender implements Runnable {
             if (enabled) {
                 if (System.currentTimeMillis() - startTime > seqNum * (1000.0 / txRate)) {
                     if (counter < sequence.length()) {
-                        preview.enableTorch(sequence.get(counter));
+                        cameraControl.enableTorch(sequence.get(counter));
                         Log.i(TAG, "-> " + (sequence.get(counter) ? 1 : 0));
                         counter++;
                         seqNum++;
-                    } else if (counter >= sequence.length() && counter < sequence.length() + zeroPadding) {
-                        preview.enableTorch(false);
+                    } else if (counter >= sequence.length() &&
+                            counter < sequence.length() + zeroPadding) {
+                        cameraControl.enableTorch(false);
                         Log.i(TAG, "-> P");
                         counter++;
                         seqNum++;

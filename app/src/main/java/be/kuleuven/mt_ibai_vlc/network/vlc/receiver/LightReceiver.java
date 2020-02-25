@@ -6,6 +6,7 @@ import android.util.Log;
 import android.util.Pair;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
 
@@ -20,6 +21,7 @@ import java.util.OptionalDouble;
 
 import be.kuleuven.mt_ibai_vlc.events.CustomEventListener;
 import be.kuleuven.mt_ibai_vlc.model.enums.AnalyzerState;
+import be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseInterface;
 
 public class LightReceiver implements ImageAnalysis.Analyzer {
 
@@ -39,18 +41,7 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                     new Pair<>(150.0, 1.025),
                     new Pair<>(Double.MAX_VALUE, 1.01)
             };
-    //private static final double FRAME_RATE_SECONDS = 8;
-    //private static final double SECOND_TO_NANOSECOND_RATIO = 1000000000;
-    //private static final int UPDATE_RATE_LED_SECONDS = 2;
-    //private static final double FRAME_RATE_NANOSECONDS =
-    //        FRAME_RATE_SECONDS / SECOND_TO_NANOSECOND_RATIO;
-    //private static final long
-    //        TIME_PER_FRAME_MILLIS =
-    //        TimeUnit.NANOSECONDS.toMillis((long) (1 / FRAME_RATE_NANOSECONDS));
     private static final double FRAME_RATE_TOLERANCE = 0.9;
-    //private static final int SLIDING_WINDOW_SIZE =
-    //        (int) (FRAME_RATE_SECONDS / UPDATE_RATE_LED_SECONDS);
-    //private static final double WINDOW_TOLERANCE = 1 + 1 / (double) SLIDING_WINDOW_SIZE;
 
     private static final int CHAR_SIZE = 8; // UTF-8
 
@@ -76,6 +67,9 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
     // Parent activity
     private Activity activity;
 
+    // Firebase
+    private FirebaseInterface firebaseInterface;
+
     // Cropped Rect
     private Rect cropRect;
     private int imageWidth;
@@ -84,17 +78,19 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
     private long samplingRate;
     private long timePerFrameMillis;
 
-    public LightReceiver(Activity activity, Rect cropRect, int imageWidth, long txRate,
+    public LightReceiver(Activity activity, FirebaseInterface firebaseInterface, Rect cropRect, int imageWidth, long txRate,
                          long samplingRate) {
         Log.e(TAG, new Gson().toJson(cropRect));
 
         this.activity = activity;
+        this.firebaseInterface = firebaseInterface;
         this.cropRect = cropRect;
         this.imageWidth = imageWidth;
         this.samplingRate = samplingRate;
         timePerFrameMillis = 1000 / (samplingRate * txRate); // Input data on seconds
         Log.i(TAG, "SamplingRate: " + samplingRate);
         Log.i(TAG, "TimePerFrameMillis: " + timePerFrameMillis);
+
         lastAnalyzedTimestamp = 0L;
         lastLuminosityValues = new ArrayList<>();
         charBuffer = new BitSet(CHAR_SIZE);
@@ -126,7 +122,8 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
     }
 
     @Override
-    public void analyze(ImageProxy image, int rotationDegrees) {
+    public void analyze(@NonNull ImageProxy image) {
+
         long currentTimestamp = System.currentTimeMillis();
 
         // Calculate the average luminescence no more often than every FRAME_RATE_SECONDS
@@ -140,6 +137,8 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
 
             // Process frame buffer and return window average
             double windowLumAverage = processValue(image.getPlanes()[0].getBuffer());
+
+            image.close();
 
             // Act according to TXState
             switch (TXState) {
@@ -231,8 +230,9 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                                     resultBuffer.set(result.length() * CHAR_SIZE + i,
                                             charBuffer.get(i));
                                 }
-                                result += new String(charBuffer.toByteArray(),
-                                        StandardCharsets.UTF_8);
+                                firebaseInterface.setAndroidResult(result += new String(charBuffer.toByteArray(),
+                                        StandardCharsets.UTF_8));
+
                                 Log.i("STRINGVAL", new String(charBuffer.toByteArray(),
                                         StandardCharsets.UTF_8));
                                 charBuffer.clear();
@@ -240,8 +240,7 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                                 // Send last event
                                 TXState = AnalyzerState.TX_ENDED;
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                                        .onAnalyzerEvent(AnalyzerState.TX_ENDED,
-                                                new Gson().toJson(result)));
+                                        .onAnalyzerEvent(AnalyzerState.TX_ENDED, result));
                                 reset();
                             }
                         }
@@ -278,17 +277,19 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
         Log.i(TAG, TXState.toString() + " - BitIsSet: " + ret.toString() + " -> " +
                 String.format("%.2f", windowLumAverage / initialLumAverage) + "(" +
                 String.format("%.2f", windowLumAverage) + ")" + " - SCI: " + syncCharIndex);
+        /*
+        Boolean ret = initialLumAverage / windowLumAverage > luminosityTolerance;
+        Log.i(TAG, TXState.toString() + " - BitIsSet: " + ret.toString() + " -> " +
+                String.format("%.2f", initialLumAverage / windowLumAverage) + "(" +
+                String.format("%.2f", windowLumAverage) + ")" + " - SCI: " + syncCharIndex);
+        */
         return ret;
-    }
-
-    public String getResult() {
-        Log.i(TAG, "RESULT_STR -> " + result);
-        return result;
     }
 
     private void reset() {
         lastLuminosityValues.clear();
         initialLumAverage = 0;
+        luminosityTolerance = 0;
     }
 
 }

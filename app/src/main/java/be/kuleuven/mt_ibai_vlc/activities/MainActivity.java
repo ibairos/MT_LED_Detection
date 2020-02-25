@@ -1,15 +1,12 @@
 package be.kuleuven.mt_ibai_vlc.activities;
 
-import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.util.Log;
-import android.util.Size;
 import android.view.Surface;
-import android.view.TextureView;
-import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -20,20 +17,33 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.camera2.Camera2Config;
 import androidx.camera.core.AspectRatio;
-import androidx.camera.core.CameraInfoUnavailableException;
-import androidx.camera.core.CameraX;
+import androidx.camera.core.Camera;
+import androidx.camera.core.CameraControl;
+import androidx.camera.core.CameraInfo;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.CameraXConfig;
+import androidx.camera.core.FocusMeteringAction;
+import androidx.camera.core.FocusMeteringResult;
 import androidx.camera.core.ImageAnalysis;
-import androidx.camera.core.ImageAnalysisConfig;
+import androidx.camera.core.MeteringPoint;
+import androidx.camera.core.MeteringPointFactory;
 import androidx.camera.core.Preview;
-import androidx.camera.core.PreviewConfig;
+import androidx.camera.core.SurfaceOrientedMeteringPointFactory;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.lifecycle.LifecycleOwner;
 
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.gson.Gson;
 
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import be.kuleuven.mt_ibai_vlc.R;
 import be.kuleuven.mt_ibai_vlc.events.CustomEventListener;
@@ -47,7 +57,8 @@ import be.kuleuven.mt_ibai_vlc.network.vlc.receiver.LightReceiver;
 import be.kuleuven.mt_ibai_vlc.network.vlc.sender.LightSender;
 
 
-public class MainActivity extends AppCompatActivity implements CustomEventListener {
+public class MainActivity extends AppCompatActivity
+        implements CustomEventListener, CameraXConfig.Provider {
 
     // TAG
     private static final String TAG = "MainActivity";
@@ -60,7 +71,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
     // Activity instance
     private int REQUEST_CODE_PERMISSIONS = 101;
     // Views and layouts
-    private TextureView cameraView;
+    private PreviewView cameraView;
     private LinearLayout cropLayout;
     private RadioGroup txModeRadioGroup;
     private EditText txDataEditText;
@@ -73,7 +84,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
 
     // Image analysis
     private ImageAnalysis imageAnalysis;
-    private Executor executor;
+    private Executor executor = Executors.newSingleThreadExecutor();
 
     // Firebase interface
     private FirebaseInterface firebaseInterface;
@@ -84,19 +95,17 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
     // LogItem
     private LogItem logItem;
 
-    public static void cancelFocus() {
-        try {
-            CameraX.getCameraControl(CameraX.LensFacing.BACK).cancelFocusAndMetering();
-        } catch (CameraInfoUnavailableException ignored) {
+    // Application
+    private Activity activity = this;
 
-        }
-    }
+    // Camera
+    private CameraControl cameraControl;
+    private CameraInfo cameraInfo;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        executor = Executors.newSingleThreadExecutor();
         setupUI();
         setupFirebaseData();
     }
@@ -114,7 +123,6 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
-
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
             if (allPermissionsGranted()) {
                 startCamera();
@@ -126,83 +134,54 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
         }
     }
 
-    @SuppressLint("RestrictedApi") private void startCamera() {
-        CameraX.unbindAll();
+    private void startCamera() {
 
-        // Size of the screen
-        Size screen = new Size(IMAGE_WIDTH, IMAGE_HEIGHT);
+        Preview preview = new Preview
+                .Builder()
+                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                .build();
 
-        PreviewConfig pConfig =
-                new PreviewConfig
-                        .Builder()
-                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                        //.setTargetResolution(screen)
+        preview.setSurfaceProvider(cameraView.getPreviewSurfaceProvider());
+
+        imageAnalysis = new ImageAnalysis
+                .Builder()
+                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build();
+
+        ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
+                ProcessCameraProvider.getInstance(this);
+        CameraSelector cameraSelector =
+                new CameraSelector.Builder().requireLensFacing(CameraSelector.LENS_FACING_BACK)
                         .build();
-        Preview preview = new Preview(pConfig);
+        cameraProviderFuture.addListener(() -> {
+            try {
+                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+                Camera camera = cameraProvider.bindToLifecycle((LifecycleOwner) activity, cameraSelector, preview,
+                        imageAnalysis);
+                cameraControl = camera.getCameraControl();
+                cameraInfo = camera.getCameraInfo();
+                lightSender = new LightSender(cameraControl, firebaseInterface, this);
 
+                firebaseInterface.setAndroidState(AndroidState.WAITING_FOR_START); // Setup completed
+            } catch (ExecutionException | InterruptedException e) {
+                // TODO handle this with a Toast or even by closing the app
+            }
+        }, ContextCompat.getMainExecutor(this));
 
-        // To update the surface texture we  have to destroy it first then re-add it
-        preview.setOnPreviewOutputUpdateListener(
-                output -> {
-                    cancelFocus();
-                    ViewGroup parent = (ViewGroup) cameraView.getParent();
-                    parent.removeView(cameraView);
-                    parent.addView(cameraView, 0);
-
-                    cameraView.setSurfaceTexture(output.getSurfaceTexture());
-                    updateTransform();
-
-                });
-
-        ImageAnalysisConfig aConfig =
-                new ImageAnalysisConfig
-                        .Builder()
-                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                        //.setTargetResolution(screen)
-                        .setImageReaderMode(ImageAnalysis.ImageReaderMode.ACQUIRE_LATEST_IMAGE)
-                        .build();
-
-        imageAnalysis = new ImageAnalysis(aConfig);
-
-
-        // Bind to lifecycle
-        CameraX.bindToLifecycle(this, preview, imageAnalysis);
-
-        lightSender = new LightSender(preview, firebaseInterface, this);
-
-        firebaseInterface.setAndroidState(AndroidState.WAITING_FOR_START); // Setup completed
-    }
-
-    private void updateTransform() {
-        Matrix mx = new Matrix();
-        float w = cameraView.getMeasuredWidth();
-        float h = cameraView.getMeasuredHeight();
-
-        float cX = w / 2f;
-        float cY = h / 2f;
-
-        int rotationDgr;
-        int rotation = (int) cameraView.getRotation();
-
-        switch (rotation) {
-            case Surface.ROTATION_0:
-                rotationDgr = 0;
-                break;
-            case Surface.ROTATION_90:
-                rotationDgr = 90;
-                break;
-            case Surface.ROTATION_180:
-                rotationDgr = 180;
-                break;
-            case Surface.ROTATION_270:
-                rotationDgr = 270;
-                break;
-            default:
-                return;
-        }
-
-        mx.postRotate((float) rotationDgr, cX, cY);
-        cameraView.setTransform(mx);
+        MeteringPointFactory factory = new SurfaceOrientedMeteringPointFactory(IMAGE_WIDTH, IMAGE_HEIGHT);
+        MeteringPoint point = factory.createPoint(cameraView.getWidth() / 2, cameraView.getHeight() / 2);
+        FocusMeteringAction action = new FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AWB)
+                .setAutoCancelDuration(20, TimeUnit.SECONDS)
+                .build();
+        ListenableFuture future = cameraControl.startFocusAndMetering(action);
+        future.addListener( () -> {
+            try {
+                cameraControl.startFocusAndMetering(action);
+                // process the result
+            } catch (Exception ignored) {
+            }
+        } , executor);
     }
 
     private boolean allPermissionsGranted() {
@@ -217,16 +196,14 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
     }
 
     private void startAnalysis() {
-        if (imageAnalysis.getAnalyzer() != null) {
-            imageAnalysis.removeAnalyzer();
-        }
+        imageAnalysis.clearAnalyzer();
         Rect cropRect = new Rect((int) (cropLayout.getX() / cameraView.getWidth() * IMAGE_WIDTH),
                 (int) (cropLayout.getY() / cameraView.getHeight() * IMAGE_HEIGHT),
                 (int) ((cropLayout.getX() + cropLayout.getWidth()) / cameraView.getWidth() *
                         IMAGE_WIDTH),
                 (int) ((cropLayout.getY() + cropLayout.getHeight()) / cameraView.getHeight() *
                         IMAGE_HEIGHT));
-        LightReceiver analyzer = new LightReceiver(this, cropRect,
+        LightReceiver analyzer = new LightReceiver(this, firebaseInterface, cropRect,
                 cameraView.getWidth(), firebaseInterface.getTxRate(),
                 firebaseInterface.getNumberOfSamples());
         imageAnalysis.setAnalyzer(executor, analyzer);
@@ -234,9 +211,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
     }
 
     private void stopAnalysis() {
-        if (imageAnalysis.getAnalyzer() != null) {
-            imageAnalysis.removeAnalyzer();
-        }
+        imageAnalysis.clearAnalyzer();
     }
 
     private void setupUI() {
@@ -335,7 +310,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
                 firebaseInterface.setAndroidState(AndroidState.RX_STARTING);
                 break;
             case TX_ENDED:
-                endRx();
+                endRx(info);
                 break;
         }
     }
@@ -358,7 +333,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
             case TX_ENDED:
                 if (firebaseInterface.getAndroidState().equals(AndroidState.RX_STARTING)
                         || firebaseInterface.getAndroidState().equals(AndroidState.RX_STARTED)) {
-                    endRx();
+                    endRx(firebaseInterface.getAndroidResult());
                 }
                 break;
             case RX_ENDED:
@@ -375,9 +350,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
         startAnalysis();
     }
 
-    public void endRx() {
-        LightReceiver analyzer = (LightReceiver) imageAnalysis.getAnalyzer();
-        String result = analyzer != null ? analyzer.getResult() : "";
+    public void endRx(String result) {
         stopAnalysis();
         firebaseInterface.setAndroidResult(result);
         firebaseInterface.setAndroidState(AndroidState.RX_ENDED);
@@ -453,4 +426,7 @@ public class MainActivity extends AppCompatActivity implements CustomEventListen
 
     }
 
+    @NonNull @Override public CameraXConfig getCameraXConfig() {
+        return Camera2Config.defaultConfig();
+    }
 }
