@@ -1,12 +1,11 @@
 package be.kuleuven.mt_ibai_vlc.activities;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.pm.PackageManager;
-import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.Surface;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -23,9 +22,9 @@ import androidx.camera.core.Camera;
 import androidx.camera.core.CameraControl;
 import androidx.camera.core.CameraInfo;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.CameraX;
 import androidx.camera.core.CameraXConfig;
 import androidx.camera.core.FocusMeteringAction;
-import androidx.camera.core.FocusMeteringResult;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.MeteringPoint;
 import androidx.camera.core.MeteringPointFactory;
@@ -136,52 +135,63 @@ public class MainActivity extends AppCompatActivity
 
     private void startCamera() {
 
-        Preview preview = new Preview
-                .Builder()
-                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                .build();
-
-        preview.setSurfaceProvider(cameraView.getPreviewSurfaceProvider());
-
-        imageAnalysis = new ImageAnalysis
-                .Builder()
-                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build();
-
-        ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
+       ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
                 ProcessCameraProvider.getInstance(this);
-        CameraSelector cameraSelector =
-                new CameraSelector.Builder().requireLensFacing(CameraSelector.LENS_FACING_BACK)
-                        .build();
+
         cameraProviderFuture.addListener(() -> {
             try {
+                CameraSelector cameraSelector =
+                        new CameraSelector.Builder().requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                                .build();
+                Preview preview = new Preview
+                        .Builder()
+                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                        .build();
+
+                preview.setSurfaceProvider(cameraView.getPreviewSurfaceProvider());
+
+                imageAnalysis = new ImageAnalysis
+                        .Builder()
+                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build();
+
                 ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
-                Camera camera = cameraProvider.bindToLifecycle((LifecycleOwner) activity, cameraSelector, preview,
-                        imageAnalysis);
+                cameraProvider.unbindAll();
+
+                Camera camera = cameraProvider
+                        .bindToLifecycle((LifecycleOwner) activity, cameraSelector, preview,
+                                imageAnalysis);
+
+                MeteringPointFactory factory =
+                        new SurfaceOrientedMeteringPointFactory(IMAGE_WIDTH, IMAGE_HEIGHT);
+                MeteringPoint point = factory.createPoint((float) cameraView.getWidth() / 2,
+                        (float) cameraView.getHeight() / 2);
+                FocusMeteringAction action =
+                        new FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AWB)
+                                .setAutoCancelDuration(20, TimeUnit.SECONDS)
+                                .build();
+
                 cameraControl = camera.getCameraControl();
                 cameraInfo = camera.getCameraInfo();
+
+                ListenableFuture future = cameraControl.startFocusAndMetering(action);
+                future.addListener(() -> {
+                    try {
+                        cameraControl.startFocusAndMetering(action);
+                    } catch (Exception ignored) {
+                    }
+                }, executor);
+
                 lightSender = new LightSender(cameraControl, firebaseInterface, this);
 
-                firebaseInterface.setAndroidState(AndroidState.WAITING_FOR_START); // Setup completed
+                // Setup completed
+                firebaseInterface.setAndroidState(AndroidState.WAITING_FOR_START);
             } catch (ExecutionException | InterruptedException e) {
-                // TODO handle this with a Toast or even by closing the app
+                System.exit(1);
             }
         }, ContextCompat.getMainExecutor(this));
 
-        MeteringPointFactory factory = new SurfaceOrientedMeteringPointFactory(IMAGE_WIDTH, IMAGE_HEIGHT);
-        MeteringPoint point = factory.createPoint(cameraView.getWidth() / 2, cameraView.getHeight() / 2);
-        FocusMeteringAction action = new FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AWB)
-                .setAutoCancelDuration(20, TimeUnit.SECONDS)
-                .build();
-        ListenableFuture future = cameraControl.startFocusAndMetering(action);
-        future.addListener( () -> {
-            try {
-                cameraControl.startFocusAndMetering(action);
-                // process the result
-            } catch (Exception ignored) {
-            }
-        } , executor);
     }
 
     private boolean allPermissionsGranted() {
@@ -285,12 +295,8 @@ public class MainActivity extends AppCompatActivity
                 }
             }
         });
-        findViewById(R.id.resetButton).setOnClickListener(v -> {
-            reset();
-        });
-        txModeRadioGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            numberOfSamplesEditText.setEnabled(checkedId == R.id.txModeMicroAndroid);
-        });
+        findViewById(R.id.resetButton).setOnClickListener(v -> reset());
+        txModeRadioGroup.setOnCheckedChangeListener((group, checkedId) -> numberOfSamplesEditText.setEnabled(checkedId == R.id.txModeMicroAndroid));
         txResultTextView = findViewById(R.id.txResultTextView);
         txAccuracyTextView = findViewById(R.id.txAccuracyTextView);
     }
@@ -427,6 +433,7 @@ public class MainActivity extends AppCompatActivity
     }
 
     @NonNull @Override public CameraXConfig getCameraXConfig() {
+        Log.e(TAG, new Gson().toJson(Camera2Config.defaultConfig()));
         return Camera2Config.defaultConfig();
     }
 }
