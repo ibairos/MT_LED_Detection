@@ -3,7 +3,10 @@ package be.kuleuven.mt_ibai_vlc.model;
 import com.google.firebase.database.Exclude;
 
 import org.apache.commons.text.similarity.JaroWinklerDistance;
+import org.apache.commons.text.similarity.JaroWinklerSimilarity;
 
+import java.nio.charset.StandardCharsets;
+import java.util.BitSet;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,7 +21,11 @@ public class LogItem {
 
     private String tx_data;
 
+    private String tx_data_bin;
+
     private String rx_data;
+
+    private String rx_data_bin;
 
     private long time;
 
@@ -31,9 +38,11 @@ public class LogItem {
     public LogItem(String tx_data, long time,
                    TxMode tx_mode, long tx_rate, long sample_num) {
         this.tx_data = tx_data;
+        tx_data_bin = textToBinaryString(tx_data);
         this.time = time;
         this.tx_mode = tx_mode;
         this.tx_rate = tx_rate;
+        this.sample_num = sample_num;
     }
 
     @Exclude
@@ -42,7 +51,9 @@ public class LogItem {
         result.put("accuracy", accuracy);
         result.put("elapsed_time", elapsed_time);
         result.put("tx_data", tx_data);
+        result.put("tx_data_bin", tx_data_bin);
         result.put("rx_data", rx_data);
+        result.put("rx_data_bin", rx_data_bin);
         result.put("time", time);
         result.put("tx_mode", tx_mode);
         result.put("tx_rate", tx_rate);
@@ -93,15 +104,25 @@ public class LogItem {
 
     public void completeLog(String rx_data) {
         this.rx_data = rx_data;
+        rx_data_bin = textToBinaryString(rx_data);
         elapsed_time = System.currentTimeMillis() - time;
         calculateAccuracy();
     }
 
     private void calculateAccuracy() {
-        JaroWinklerDistance jaroWinklerDistance = new JaroWinklerDistance();
-        accuracy =
-                rx_data != null && !rx_data.isEmpty() ? jaroWinklerDistance.apply(tx_data, rx_data)
-                                                      : 0;
+        JaroWinklerSimilarity jaroWinklerSimilarity = new JaroWinklerSimilarity();
+        accuracy = rx_data != null && !rx_data.isEmpty()
+                   ? jaroWinklerSimilarity.apply(tx_data_bin, rx_data_bin)
+                   : 0;
+    }
+
+    private String textToBinaryString(String text) {
+        StringBuilder s = new StringBuilder();
+        for (byte b : BitSet.valueOf(text.getBytes(StandardCharsets.UTF_8)).toByteArray()) {
+            s.append(String.format("%8s",
+                    Integer.toBinaryString(b & 0xFF)).replace(' ', '0'));
+        }
+        return s.toString();
     }
 
 }
