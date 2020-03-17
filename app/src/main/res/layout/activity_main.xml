@@ -83,7 +83,6 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_vertical"
                 android:text="@string/tx_mode"
-                android:textAlignment="center"
                 android:textAppearance="@style/TextAppearance.AppCompat.Medium"
                 android:textColor="#000000" />
 
@@ -248,8 +247,8 @@
 
         <LinearLayout
             android:id="@+id/mainCropLayout"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
             android:background="@drawable/custom_border"
             android:orientation="vertical"
             app:layout_constraintBottom_toBottomOf="@+id/mainCameraView"

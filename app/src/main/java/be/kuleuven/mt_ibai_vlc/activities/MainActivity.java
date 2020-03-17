@@ -354,6 +354,7 @@ public class MainActivity extends AppCompatActivity
     public void startRx() {
         initLog();
         startAnalysis();
+        firebaseInterface.setAndroidState(AndroidState.RX_STARTING);
     }
 
     public void endRx(String result) {
@@ -414,7 +415,8 @@ public class MainActivity extends AppCompatActivity
         if (firebaseInterface.getMicroState() == MicroState.EXIT
                 || firebaseInterface.getMicroState() == MicroState.RX_WAITING
                 || firebaseInterface.getMicroState() == MicroState.RX_STARTING
-                || firebaseInterface.getMicroState() == MicroState.RX_STARTED) {
+                || firebaseInterface.getMicroState() == MicroState.RX_STARTED
+                || firebaseInterface.getMicroState() == MicroState.WAITING_FOR_CHECK_IN) {
             firebaseInterface.setMicroState(MicroState.LOADING);
         }
         txResultTextView.setText(R.string.no_info);

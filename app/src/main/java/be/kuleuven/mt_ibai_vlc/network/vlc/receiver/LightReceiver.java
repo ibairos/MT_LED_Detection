@@ -162,9 +162,7 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                     break;
 
                 case WAITING:
-                    //double lastFrameLum = lastLuminosityValues.get(SLIDING_WINDOW_SIZE - 1);
                     if (bitIsSet(windowLumAverage)) {
-                        //&& lastFrameLum / windowLumAverage < WINDOW_TOLERANCE) {
                         charBuffer.set(syncCharIndex);
                         syncCharIndex++;
                         TXState = AnalyzerState.STARTING;
@@ -176,8 +174,7 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                 case STARTING:
                     syncSeqNum++;
                     if (syncSeqNum % samplingRate == 0) {
-                        Boolean bitIsOne = bitIsSet(windowLumAverage);
-                        if (bitIsOne) {
+                        if (bitIsSet(windowLumAverage)) {
                             charBuffer.set(Math.toIntExact(syncCharIndex));
                         }
                         if (syncCharIndex == CHAR_SIZE - 1) {
@@ -217,7 +214,7 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
 
                 case TX_STARTED:
                     txSeqNum++;
-                    if (/*txSeqNum > samplingRate && */txSeqNum % samplingRate == 0) {
+                    if (txSeqNum % samplingRate == 0) {
                         charBuffer.set(txCharIndex, bitIsSet(windowLumAverage));
                         Log.i(TAG, "TXSeq: " + txSeqNum + ", TXChar: " + txCharIndex);
                         txCharIndex++;
@@ -274,15 +271,9 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
 
     private Boolean bitIsSet(double windowLumAverage) {
         Boolean ret = windowLumAverage / initialLumAverage > luminosityTolerance;
-        Log.i(TAG, TXState.toString() + " - BitIsSet: " + ret.toString() + " -> " +
+        Log.e(TAG, TXState.toString() + " - BitIsSet: " + ret.toString() + " -> " +
                 String.format("%.2f", windowLumAverage / initialLumAverage) + "(" +
                 String.format("%.2f", windowLumAverage) + ")" + " - SCI: " + syncCharIndex);
-        /*
-        Boolean ret = initialLumAverage / windowLumAverage > luminosityTolerance;
-        Log.i(TAG, TXState.toString() + " - BitIsSet: " + ret.toString() + " -> " +
-                String.format("%.2f", initialLumAverage / windowLumAverage) + "(" +
-                String.format("%.2f", windowLumAverage) + ")" + " - SCI: " + syncCharIndex);
-        */
         return ret;
     }
 
