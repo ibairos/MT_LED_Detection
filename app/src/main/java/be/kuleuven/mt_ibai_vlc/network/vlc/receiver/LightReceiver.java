@@ -113,8 +113,10 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
         for (int i = 0; i < data.length; i++) {
             int x = i % imageWidth;
             int y = i / imageWidth;
-            if (cropRect.left <= x && x < cropRect.right && cropRect.top <= y &&
-                    y < cropRect.bottom) {
+            if (cropRect.left <= x
+                    && x < cropRect.right
+                    && cropRect.top <= y
+                    && y < cropRect.bottom) {
                 ret.add(data[i]);
             }
         }

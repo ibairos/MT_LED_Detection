@@ -1,6 +1,5 @@
 package be.kuleuven.mt_ibai_vlc.activities;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.graphics.Rect;
@@ -22,7 +21,6 @@ import androidx.camera.core.Camera;
 import androidx.camera.core.CameraControl;
 import androidx.camera.core.CameraInfo;
 import androidx.camera.core.CameraSelector;
-import androidx.camera.core.CameraX;
 import androidx.camera.core.CameraXConfig;
 import androidx.camera.core.FocusMeteringAction;
 import androidx.camera.core.ImageAnalysis;
@@ -135,13 +133,14 @@ public class MainActivity extends AppCompatActivity
 
     private void startCamera() {
 
-       ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
+        ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
                 ProcessCameraProvider.getInstance(this);
 
         cameraProviderFuture.addListener(() -> {
             try {
                 CameraSelector cameraSelector =
-                        new CameraSelector.Builder().requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                        new CameraSelector.Builder()
+                                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
                                 .build();
                 Preview preview = new Preview
                         .Builder()
@@ -296,7 +295,8 @@ public class MainActivity extends AppCompatActivity
             }
         });
         findViewById(R.id.resetButton).setOnClickListener(v -> reset());
-        txModeRadioGroup.setOnCheckedChangeListener((group, checkedId) -> numberOfSamplesEditText.setEnabled(checkedId == R.id.txModeMicroAndroid));
+        txModeRadioGroup.setOnCheckedChangeListener((group, checkedId) -> numberOfSamplesEditText
+                .setEnabled(checkedId == R.id.txModeMicroAndroid));
         txResultTextView = findViewById(R.id.txResultTextView);
         txAccuracyTextView = findViewById(R.id.txAccuracyTextView);
     }
