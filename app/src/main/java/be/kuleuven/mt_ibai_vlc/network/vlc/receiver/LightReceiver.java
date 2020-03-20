@@ -250,6 +250,8 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                     break;
             }
 
+        } else {
+            image.close();
         }
     }
 

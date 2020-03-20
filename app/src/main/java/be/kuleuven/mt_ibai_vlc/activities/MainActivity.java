@@ -205,7 +205,7 @@ public class MainActivity extends AppCompatActivity
     }
 
     private void startAnalysis() {
-        imageAnalysis.clearAnalyzer();
+
         Rect cropRect = new Rect((int) (cropLayout.getX() / cameraView.getWidth() * IMAGE_WIDTH),
                 (int) (cropLayout.getY() / cameraView.getHeight() * IMAGE_HEIGHT),
                 (int) ((cropLayout.getX() + cropLayout.getWidth()) / cameraView.getWidth() *
@@ -215,8 +215,11 @@ public class MainActivity extends AppCompatActivity
         LightReceiver analyzer = new LightReceiver(this, firebaseInterface, cropRect,
                 cameraView.getWidth(), firebaseInterface.getTxRate(),
                 firebaseInterface.getNumberOfSamples());
+        while (imageAnalysis == null) {
+            Toast.makeText(getApplicationContext(), "Initializing camera...", Toast.LENGTH_SHORT).show();
+        }
+        stopAnalysis();
         imageAnalysis.setAnalyzer(executor, analyzer);
-
     }
 
     private void stopAnalysis() {
