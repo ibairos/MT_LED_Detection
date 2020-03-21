@@ -11,7 +11,7 @@
         android:id="@+id/upperLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_weight="0.33"
+        android:layout_weight="0.3"
         android:background="@drawable/custom_border">
 
         <TextView
@@ -54,6 +54,17 @@
             app:layout_constraintTop_toTopOf="@+id/txDataEditText" />
 
         <EditText
+            android:id="@+id/txDistanceEditText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ems="10"
+            android:hint="@string/distance"
+            android:importantForAutofill="no"
+            android:inputType="number"
+            app:layout_constraintEnd_toStartOf="@+id/samplingRateEditText"
+            app:layout_constraintTop_toBottomOf="@+id/txDataEditText" />
+
+        <EditText
             android:id="@+id/samplingRateEditText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -74,8 +85,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintHorizontal_bias="0.075"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/txDataEditText"
-            app:layout_constraintVertical_bias="0.5"
+            app:layout_constraintTop_toBottomOf="@+id/txDistanceEditText"
             tools:ignore="UselessParent">
 
             <TextView
@@ -140,8 +150,8 @@
         android:id="@+id/centerLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_weight="0.33"
-        android:background="@drawable/custom_border" >
+        android:layout_weight="0.375"
+        android:background="@drawable/custom_border">
 
         <TextView
             android:id="@+id/centerLayoutTitle"
@@ -221,7 +231,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_weight="0.33"
-        android:background="@drawable/custom_border" >
+        android:background="@drawable/custom_border">
 
         <androidx.camera.view.PreviewView
             android:id="@+id/mainCameraView"
@@ -256,5 +266,6 @@
             app:layout_constraintStart_toStartOf="@+id/mainCameraView"
             app:layout_constraintTop_toTopOf="@+id/mainCameraView"
             app:layout_constraintVertical_bias="0.4" />
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 </LinearLayout>

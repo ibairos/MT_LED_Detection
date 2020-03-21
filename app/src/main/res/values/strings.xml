@@ -19,6 +19,7 @@
     <string name="camera_view">Camera view</string>
     <string name="reset">Reset</string>
     <string name="sample_num"># of samples</string>
+    <string name="distance">Distance (cm)</string>
 
     <!-- Toasts -->
     <string name="micro_not_online">Micro is not online!</string>

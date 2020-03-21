@@ -73,6 +73,7 @@ public class MainActivity extends AppCompatActivity
     private RadioGroup txModeRadioGroup;
     private EditText txDataEditText;
     private EditText txRateEditText;
+    private EditText txDistanceEditText;
     private EditText numberOfSamplesEditText;
     private Button txStartButton;
 
@@ -98,6 +99,7 @@ public class MainActivity extends AppCompatActivity
     // Camera
     private CameraControl cameraControl;
     private CameraInfo cameraInfo;
+    private ListenableFuture<ProcessCameraProvider> cameraProviderFuture;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -133,34 +135,17 @@ public class MainActivity extends AppCompatActivity
 
     private void startCamera() {
 
-        ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
-                ProcessCameraProvider.getInstance(this);
-
         cameraProviderFuture.addListener(() -> {
             try {
+
+                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+
                 CameraSelector cameraSelector =
                         new CameraSelector.Builder()
                                 .requireLensFacing(CameraSelector.LENS_FACING_BACK)
                                 .build();
-                Preview preview = new Preview
-                        .Builder()
-                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                        .build();
 
-                preview.setSurfaceProvider(cameraView.getPreviewSurfaceProvider());
-
-                imageAnalysis = new ImageAnalysis
-                        .Builder()
-                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build();
-
-                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
-                cameraProvider.unbindAll();
-
-                Camera camera = cameraProvider
-                        .bindToLifecycle((LifecycleOwner) activity, cameraSelector, preview,
-                                imageAnalysis);
+                Camera camera = bindPreviewAndAnalysis(cameraProvider, cameraSelector);
 
                 MeteringPointFactory factory =
                         new SurfaceOrientedMeteringPointFactory(IMAGE_WIDTH, IMAGE_HEIGHT);
@@ -191,6 +176,22 @@ public class MainActivity extends AppCompatActivity
             }
         }, ContextCompat.getMainExecutor(this));
 
+    }
+
+    private Camera bindPreviewAndAnalysis(@NonNull ProcessCameraProvider cameraProvider, @NonNull CameraSelector cameraSelector) {
+        Preview preview = new Preview.Builder()
+                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                .build();
+
+        preview.setSurfaceProvider(cameraView.getPreviewSurfaceProvider());
+
+        imageAnalysis = new ImageAnalysis
+                .Builder()
+                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build();
+
+        return cameraProvider.bindToLifecycle((LifecycleOwner)this, cameraSelector, preview, imageAnalysis);
     }
 
     private boolean allPermissionsGranted() {
@@ -231,6 +232,7 @@ public class MainActivity extends AppCompatActivity
         cropLayout = findViewById(R.id.mainCropLayout);
         txDataEditText = findViewById(R.id.txDataEditText);
         txRateEditText = findViewById(R.id.txRateEditText);
+        txDistanceEditText = findViewById(R.id.txDistanceEditText);
         numberOfSamplesEditText = findViewById(R.id.samplingRateEditText);
         txModeRadioGroup = findViewById(R.id.txModeRadioGroup);
         txStartButton = findViewById(R.id.txStartButton);
@@ -280,6 +282,9 @@ public class MainActivity extends AppCompatActivity
                         numberOfSamples = 1;
                     }
 
+                    Integer distance = txDistanceEditText.getText().toString().isEmpty()
+                                       ? 100
+                                       : Integer.parseInt(txDistanceEditText.getText().toString());
 
                     AndroidState nextState =
                             txMode.equals(TxMode.MICRO_ANDROID)
@@ -290,9 +295,11 @@ public class MainActivity extends AppCompatActivity
                     firebaseInterface.setTxMode(txMode);
                     firebaseInterface.setTxRate(txRate);
                     firebaseInterface.setNumberOfSamples(numberOfSamples);
+                    firebaseInterface.setDistance(distance);
                     txStartButton.setEnabled(false);
                     txDataEditText.setEnabled(false);
                     txRateEditText.setEnabled(false);
+                    txDistanceEditText.setEnabled(false);
                     numberOfSamplesEditText.setEnabled(false);
                 }
             }
@@ -302,6 +309,7 @@ public class MainActivity extends AppCompatActivity
                 .setEnabled(checkedId == R.id.txModeMicroAndroid));
         txResultTextView = findViewById(R.id.txResultTextView);
         txAccuracyTextView = findViewById(R.id.txAccuracyTextView);
+        cameraProviderFuture = ProcessCameraProvider.getInstance(this);
     }
 
     private void setupFirebaseData() {
@@ -386,8 +394,9 @@ public class MainActivity extends AppCompatActivity
         TxMode txMode = firebaseInterface.getTxMode();
         long txRate = firebaseInterface.getTxRate();
         long numberOfSamples = firebaseInterface.getNumberOfSamples();
+        int distance = firebaseInterface.getDistance();
         long time = System.currentTimeMillis();
-        logItem = new LogItem(txData, time, txMode, txRate, numberOfSamples);
+        logItem = new LogItem(txData, time, txMode, txRate, numberOfSamples, distance);
     }
 
     public void saveResults() {
@@ -427,6 +436,7 @@ public class MainActivity extends AppCompatActivity
         txStartButton.setEnabled(true);
         txDataEditText.setEnabled(true);
         txRateEditText.setEnabled(true);
+        txDistanceEditText.setEnabled(true);
         numberOfSamplesEditText
                 .setEnabled(txModeRadioGroup.getCheckedRadioButtonId() == R.id.txModeMicroAndroid);
         if (firebaseInterface.getTxMode() == TxMode.MICRO_ANDROID) {

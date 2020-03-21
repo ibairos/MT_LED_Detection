@@ -35,14 +35,17 @@ public class LogItem {
 
     private long sample_num;
 
+    private int distance;
+
     public LogItem(String tx_data, long time,
-                   TxMode tx_mode, long tx_rate, long sample_num) {
+                   TxMode tx_mode, long tx_rate, long sample_num, int distance) {
         this.tx_data = tx_data;
         tx_data_bin = textToBinaryString(tx_data);
         this.time = time;
         this.tx_mode = tx_mode;
         this.tx_rate = tx_rate;
         this.sample_num = sample_num;
+        this.distance = distance;
     }
 
     @Exclude
@@ -58,6 +61,7 @@ public class LogItem {
         result.put("tx_mode", tx_mode);
         result.put("tx_rate", tx_rate);
         result.put("sample_num", sample_num);
+        result.put("distance", distance);
 
         return result;
     }

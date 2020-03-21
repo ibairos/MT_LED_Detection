@@ -52,6 +52,7 @@ public class FirebaseInterface {
     private TxMode txMode;
     private long txRate;
     private long numberOfSamples;
+    private Integer distance;
 
     public FirebaseInterface(Activity activity) {
         this.activity = activity;
@@ -244,6 +245,14 @@ public class FirebaseInterface {
         this.numberOfSamples = numberOfSamples;
         myRef.child(VARIABLES).child(COMMON).child(SAMPLE_NUM)
                 .setValue(numberOfSamples);
+    }
+
+    public Integer getDistance() {
+        return distance;
+    }
+
+    public void setDistance(Integer distance) {
+        this.distance = distance;
     }
 
     public void pushLog(LogItem logItem) {
