@@ -5,6 +5,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.util.Log;
+import android.util.Size;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -16,7 +17,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.camera2.Camera2Config;
-import androidx.camera.core.AspectRatio;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraControl;
 import androidx.camera.core.CameraInfo;
@@ -32,7 +32,6 @@ import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.lifecycle.LifecycleOwner;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.gson.Gson;
@@ -89,6 +88,7 @@ public class MainActivity extends AppCompatActivity
 
     // LightSender
     private LightSender lightSender;
+    private LightReceiver analyzer;
 
     // LogItem
     private LogItem logItem;
@@ -131,6 +131,17 @@ public class MainActivity extends AppCompatActivity
                 finish();
             }
         }
+    }
+
+    private boolean allPermissionsGranted() {
+
+        for (String permission : REQUIRED_PERMISSIONS) {
+            if (ContextCompat.checkSelfPermission(this, permission) !=
+                    PackageManager.PERMISSION_GRANTED) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void startCamera() {
@@ -178,34 +189,26 @@ public class MainActivity extends AppCompatActivity
 
     }
 
-    private Camera bindPreviewAndAnalysis(@NonNull ProcessCameraProvider cameraProvider, @NonNull CameraSelector cameraSelector) {
+    private Camera bindPreviewAndAnalysis(@NonNull ProcessCameraProvider cameraProvider,
+                                          @NonNull CameraSelector cameraSelector) {
         Preview preview = new Preview.Builder()
-                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                .setTargetResolution(new Size(IMAGE_WIDTH, IMAGE_HEIGHT))
                 .build();
 
         preview.setSurfaceProvider(cameraView.getPreviewSurfaceProvider());
 
         imageAnalysis = new ImageAnalysis
                 .Builder()
-                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                .setTargetResolution(new Size(IMAGE_WIDTH, IMAGE_HEIGHT))
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build();
 
-        return cameraProvider.bindToLifecycle((LifecycleOwner)this, cameraSelector, preview, imageAnalysis);
-    }
-
-    private boolean allPermissionsGranted() {
-
-        for (String permission : REQUIRED_PERMISSIONS) {
-            if (ContextCompat.checkSelfPermission(this, permission) !=
-                    PackageManager.PERMISSION_GRANTED) {
-                return false;
-            }
-        }
-        return true;
+        return cameraProvider
+                .bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
     }
 
     private void startAnalysis() {
+
 
         Rect cropRect = new Rect((int) (cropLayout.getX() / cameraView.getWidth() * IMAGE_WIDTH),
                 (int) (cropLayout.getY() / cameraView.getHeight() * IMAGE_HEIGHT),
@@ -213,18 +216,26 @@ public class MainActivity extends AppCompatActivity
                         IMAGE_WIDTH),
                 (int) ((cropLayout.getY() + cropLayout.getHeight()) / cameraView.getHeight() *
                         IMAGE_HEIGHT));
-        LightReceiver analyzer = new LightReceiver(this, firebaseInterface, cropRect,
-                cameraView.getWidth(), firebaseInterface.getTxRate(),
-                firebaseInterface.getNumberOfSamples());
-        while (imageAnalysis == null) {
-            Toast.makeText(getApplicationContext(), "Initializing camera...", Toast.LENGTH_SHORT).show();
+
+        //Rect cropRect = new Rect(0, 0, 640, 480);
+
+        if (analyzer == null) {
+            analyzer = new LightReceiver(this, firebaseInterface, cropRect,
+                    firebaseInterface.getTxRate(), firebaseInterface.getNumberOfSamples());
+            while (imageAnalysis == null) {
+                Toast.makeText(getApplicationContext(), "Initializing camera...",
+                        Toast.LENGTH_SHORT).show();
+            }
+            imageAnalysis.setAnalyzer(executor, analyzer);
+        } else {
+            analyzer.updateParams(cropRect, firebaseInterface.getTxRate(),
+                    firebaseInterface.getNumberOfSamples());
+            analyzer.setEnabled(true);
         }
-        stopAnalysis();
-        imageAnalysis.setAnalyzer(executor, analyzer);
     }
 
     private void stopAnalysis() {
-        imageAnalysis.clearAnalyzer();
+        if (analyzer != null) analyzer.setEnabled(false);
     }
 
     private void setupUI() {
