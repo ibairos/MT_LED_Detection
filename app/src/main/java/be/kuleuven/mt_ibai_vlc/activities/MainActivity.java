@@ -17,6 +17,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.camera2.Camera2Config;
+import androidx.camera.core.AspectRatio;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraControl;
 import androidx.camera.core.CameraInfo;
@@ -93,13 +94,12 @@ public class MainActivity extends AppCompatActivity
     // LogItem
     private LogItem logItem;
 
-    // Application
-    private Activity activity = this;
-
     // Camera
     private CameraControl cameraControl;
     private CameraInfo cameraInfo;
     private ListenableFuture<ProcessCameraProvider> cameraProviderFuture;
+
+    private boolean cameraUp = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -112,6 +112,7 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        if (cameraUp) return;
         if (allPermissionsGranted()) {
             startCamera(); //start camera if permission has been granted by user
         } else {
@@ -182,6 +183,7 @@ public class MainActivity extends AppCompatActivity
 
                 // Setup completed
                 firebaseInterface.setAndroidState(AndroidState.WAITING_FOR_START);
+                cameraUp = true;
             } catch (ExecutionException | InterruptedException e) {
                 System.exit(1);
             }
@@ -192,14 +194,14 @@ public class MainActivity extends AppCompatActivity
     private Camera bindPreviewAndAnalysis(@NonNull ProcessCameraProvider cameraProvider,
                                           @NonNull CameraSelector cameraSelector) {
         Preview preview = new Preview.Builder()
-                .setTargetResolution(new Size(IMAGE_WIDTH, IMAGE_HEIGHT))
+                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
                 .build();
 
         preview.setSurfaceProvider(cameraView.getPreviewSurfaceProvider());
 
         imageAnalysis = new ImageAnalysis
                 .Builder()
-                .setTargetResolution(new Size(IMAGE_WIDTH, IMAGE_HEIGHT))
+                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build();
 
@@ -380,9 +382,10 @@ public class MainActivity extends AppCompatActivity
     }
 
     public void endRx(String result) {
-        stopAnalysis();
+        Log.i(TAG, "Rx ended, result: " + result);
         firebaseInterface.setAndroidResult(result);
         firebaseInterface.setAndroidState(AndroidState.RX_ENDED);
+        stopAnalysis();
         saveResults();
     }
 

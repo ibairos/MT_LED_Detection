@@ -32,15 +32,15 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
     // Constant parameters
     private static final Pair[] luminosityToleranceTable =
             new Pair[]{
-                    new Pair<>(80.0, 1.2),
-                    new Pair<>(90.0, 1.175),
-                    new Pair<>(100.0, 1.15),
-                    new Pair<>(110.0, 1.125),
-                    new Pair<>(120.0, 1.1),
-                    new Pair<>(130.0, 1.075),
-                    new Pair<>(140.0, 1.05),
-                    new Pair<>(150.0, 1.025),
-                    new Pair<>(Double.MAX_VALUE, 1.01)
+                    new Pair<>(80.0, 1.4),
+                    new Pair<>(90.0, 1.3),
+                    new Pair<>(100.0, 1.25),
+                    new Pair<>(110.0, 1.2),
+                    new Pair<>(120.0, 1.175),
+                    new Pair<>(130.0, 1.15),
+                    new Pair<>(140.0, 1.125),
+                    new Pair<>(150.0, 1.1),
+                    new Pair<>(Double.MAX_VALUE, 1.075)
             };
     private static final double FRAME_RATE_TOLERANCE = 0.9;
 
@@ -115,12 +115,6 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
             lastAnalyzedTimestamp =
                     lastAnalyzedTimestamp != 0L ? theoreticalTimestamp : currentTimestamp;
 
-            /*
-            Log.e(TAG, "1- IW: " + image.getWidth() + ", IH: " + image.getHeight() + ", CR: "
-                    + new Gson().toJson(image.getCropRect()) + ", IF: " + new Gson().toJson(image
-                    .getFormat()));
-            */
-
             // Process frame buffer and return window average
             double windowLumAverage =
                     processValue(image.getPlanes()[0].getBuffer(), image.getWidth());
@@ -165,9 +159,6 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                             charBuffer.set(Math.toIntExact(syncCharIndex));
                         }
                         if (syncCharIndex == CHAR_SIZE - 1) {
-                            Log.e(TAG,
-                                    "COMP - CB - " + new Gson().toJson(charBuffer.toLongArray()));
-                            Log.e(TAG, "COMP - SS - " + new Gson().toJson(START_SEQ.toLongArray()));
                             if (charBuffer.equals(START_SEQ)) {
                                 txState = AnalyzerState.TX_STARTED;
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
@@ -192,7 +183,6 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
                                         .onAnalyzerEvent(AnalyzerState.WAITING, null));
                             }
-                            Log.i(TAG, "SEQ_NUM: " + syncSeqNum);
                         } else {
                             syncCharIndex++;
                         }
@@ -203,12 +193,14 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                     txSeqNum++;
                     if (txSeqNum % samplingRate == 0) {
                         charBuffer.set(txCharIndex, bitIsSet(windowLumAverage));
-                        Log.i(TAG, "TXSeq: " + txSeqNum + ", TXChar: " + txCharIndex);
                         txCharIndex++;
                         if (txCharIndex == CHAR_SIZE) {
                             txCharIndex = 0;
-                            Log.i(TAG, new Gson()
-                                    .toJson(Long.toBinaryString(charBuffer.toLongArray()[0])));
+                            Log.i(TAG,
+                                    new Gson().toJson(Long.toBinaryString(charBuffer.toLongArray()[0]))
+                                            + " -> "
+                                            + new String(charBuffer.toByteArray(), StandardCharsets.UTF_8)
+                            );
                             if (!charBuffer.equals(END_SEQ)) {
                                 for (int i = 0; i < 8; i++) {
                                     resultBuffer.set(result.length() * CHAR_SIZE + i,
@@ -217,15 +209,13 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                                 firebaseInterface.setAndroidResult(
                                         result += new String(charBuffer.toByteArray(),
                                                 StandardCharsets.UTF_8));
-
-                                Log.i("STRINGVAL", new String(charBuffer.toByteArray(),
-                                        StandardCharsets.UTF_8));
                                 charBuffer.clear();
                             } else {
                                 // Send last event
                                 txState = AnalyzerState.TX_ENDED;
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
                                         .onAnalyzerEvent(AnalyzerState.TX_ENDED, result));
+                                Log.i(TAG, "RX_DATA: " + result);
                                 reset();
                             }
                         }
@@ -242,18 +232,9 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
     }
 
     private Boolean bitIsSet(double windowLumAverage) {
-        //return bitIsSetRev(windowLumAverage);
         Boolean ret = windowLumAverage / initialLumAverage > luminosityTolerance;
         Log.d(TAG, txState.toString() + " - BitIsSet: " + ret.toString() + " -> " +
                 String.format("%.2f", windowLumAverage / initialLumAverage) + "(" +
-                String.format("%.2f", windowLumAverage) + ")" + " - SCI: " + syncCharIndex);
-        return ret;
-    }
-
-    private Boolean bitIsSetRev(double windowLumAverage) {
-        Boolean ret = initialLumAverage / windowLumAverage > luminosityTolerance;
-        Log.d(TAG, txState.toString() + " - BitIsSet: " + ret.toString() + " -> " +
-                String.format("%.2f", initialLumAverage / windowLumAverage) + "(" +
                 String.format("%.2f", windowLumAverage) + ")" + " - SCI: " + syncCharIndex);
         return ret;
     }
