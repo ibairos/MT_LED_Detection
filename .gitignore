@@ -92,3 +92,6 @@ app/release
 
 # Jetbrains
 .idea/
+
+# Gradle wrapper JAR
+gradle-wrapper.jar
