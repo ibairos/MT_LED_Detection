@@ -42,7 +42,6 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                     new Pair<>(150.0, 1.1),
                     new Pair<>(Double.MAX_VALUE, 1.075)
             };
-    private static final double FRAME_RATE_TOLERANCE = 0.9;
 
     private static final int CHAR_SIZE = 8; // UTF-8
 
@@ -107,8 +106,10 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
 
         // Calculate the average luminescence no more often than every FRAME_RATE_SECONDS
         if (currentTimestamp - lastAnalyzedTimestamp >=
-                timePerFrameMillis * FRAME_RATE_TOLERANCE
+                timePerFrameMillis
                 && analyze) {
+
+            Log.e(TAG, String.valueOf(currentTimestamp));
 
             // Update timestamp of last analyzed frame
             long theoreticalTimestamp = lastAnalyzedTimestamp + timePerFrameMillis;
@@ -197,9 +198,11 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                         if (txCharIndex == CHAR_SIZE) {
                             txCharIndex = 0;
                             Log.i(TAG,
-                                    new Gson().toJson(Long.toBinaryString(charBuffer.toLongArray()[0]))
+                                    new Gson().toJson(Long
+                                            .toBinaryString(charBuffer.toLongArray()[0]))
                                             + " -> "
-                                            + new String(charBuffer.toByteArray(), StandardCharsets.UTF_8)
+                                            + new String(charBuffer.toByteArray(),
+                                            StandardCharsets.UTF_8)
                             );
                             if (!charBuffer.equals(END_SEQ)) {
                                 for (int i = 0; i < 8; i++) {

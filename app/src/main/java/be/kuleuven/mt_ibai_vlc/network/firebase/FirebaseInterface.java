@@ -24,9 +24,9 @@ import be.kuleuven.mt_ibai_vlc.model.enums.MicroState;
 import be.kuleuven.mt_ibai_vlc.model.enums.TxMode;
 
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.ANDROID;
-import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.MICRO;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.COMMON;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.LOGS;
+import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.MICRO;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.RESULT;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.SAMPLE_NUM;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.STATE;

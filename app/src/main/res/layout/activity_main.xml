@@ -257,8 +257,8 @@
 
         <LinearLayout
             android:id="@+id/mainCropLayout"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
+            android:layout_width="150dp"
+            android:layout_height="150dp"
             android:background="@drawable/custom_border"
             android:orientation="vertical"
             app:layout_constraintBottom_toBottomOf="@+id/mainCameraView"

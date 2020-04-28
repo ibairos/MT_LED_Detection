@@ -1,11 +1,10 @@
 package be.kuleuven.mt_ibai_vlc.activities;
 
-import android.app.Activity;
+import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.util.Log;
-import android.util.Size;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -37,6 +36,7 @@ import androidx.core.content.ContextCompat;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.gson.Gson;
 
+import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -171,13 +171,14 @@ public class MainActivity extends AppCompatActivity
                 cameraControl = camera.getCameraControl();
                 cameraInfo = camera.getCameraInfo();
 
-                ListenableFuture future = cameraControl.startFocusAndMetering(action);
-                future.addListener(() -> {
-                    try {
-                        cameraControl.startFocusAndMetering(action);
-                    } catch (Exception ignored) {
-                    }
-                }, executor);
+                if (Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMaxZoomRatio() <
+                        4.0) {
+                    cameraControl
+                            .setZoomRatio(cameraInfo.getZoomState().getValue().getMaxZoomRatio());
+                } else {
+                    cameraControl.setZoomRatio(4f);
+                }
+
 
                 lightSender = new LightSender(cameraControl, firebaseInterface, this);
 
@@ -191,13 +192,21 @@ public class MainActivity extends AppCompatActivity
 
     }
 
+    @SuppressLint("RestrictedApi")
     private Camera bindPreviewAndAnalysis(@NonNull ProcessCameraProvider cameraProvider,
                                           @NonNull CameraSelector cameraSelector) {
-        Preview preview = new Preview.Builder()
-                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                .build();
+        Preview.Builder previewBuilder = new Preview.Builder()
+                .setTargetAspectRatio(AspectRatio.RATIO_4_3);
 
-        preview.setSurfaceProvider(cameraView.getPreviewSurfaceProvider());
+/*
+        new Camera2ImplConfig.Extender<Preview.Builder>(previewBuilder)
+                .setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, new Range
+                (60, 60))
+                .setCaptureRequestOption(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, 1);
+*/
+        Preview preview = previewBuilder.build();
+
+        preview.setSurfaceProvider(cameraView.createSurfaceProvider(cameraInfo));
 
         imageAnalysis = new ImageAnalysis
                 .Builder()
@@ -296,7 +305,7 @@ public class MainActivity extends AppCompatActivity
                     }
 
                     Integer distance = txDistanceEditText.getText().toString().isEmpty()
-                                       ? 100
+                                       ? 50
                                        : Integer.parseInt(txDistanceEditText.getText().toString());
 
                     AndroidState nextState =
@@ -462,7 +471,6 @@ public class MainActivity extends AppCompatActivity
     }
 
     @NonNull @Override public CameraXConfig getCameraXConfig() {
-        Log.e(TAG, new Gson().toJson(Camera2Config.defaultConfig()));
         return Camera2Config.defaultConfig();
     }
 }
