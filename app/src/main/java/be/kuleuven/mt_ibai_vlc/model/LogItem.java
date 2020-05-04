@@ -37,8 +37,10 @@ public class LogItem {
 
     private int distance;
 
+    private boolean hamming_enabled;
+
     public LogItem(String tx_data, long time,
-                   TxMode tx_mode, long tx_rate, long sample_num, int distance) {
+                   TxMode tx_mode, long tx_rate, long sample_num, int distance, boolean hamming_enabled) {
         this.tx_data = tx_data;
         tx_data_bin = textToBinaryString(tx_data);
         this.time = time;
@@ -46,6 +48,7 @@ public class LogItem {
         this.tx_rate = tx_rate;
         this.sample_num = sample_num;
         this.distance = distance;
+        this.hamming_enabled = hamming_enabled;
     }
 
     @Exclude
@@ -62,6 +65,7 @@ public class LogItem {
         result.put("tx_rate", tx_rate);
         result.put("sample_num", sample_num);
         result.put("distance", distance);
+        result.put("hamming_enabled", hamming_enabled);
 
         return result;
     }

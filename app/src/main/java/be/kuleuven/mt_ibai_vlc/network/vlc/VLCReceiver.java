@@ -1,4 +1,4 @@
-package be.kuleuven.mt_ibai_vlc.network.vlc.receiver;
+package be.kuleuven.mt_ibai_vlc.network.vlc;
 
 import android.app.Activity;
 import android.graphics.Rect;
@@ -12,19 +12,22 @@ import androidx.camera.core.ImageProxy;
 
 import com.google.gson.Gson;
 
+import org.apache.commons.codec.binary.Hex;
+
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
 import java.util.OptionalDouble;
 
+import be.kuleuven.mt_ibai_vlc.common.Hamming74;
+import be.kuleuven.mt_ibai_vlc.common.NetworkUtils;
 import be.kuleuven.mt_ibai_vlc.events.CustomEventListener;
 import be.kuleuven.mt_ibai_vlc.model.enums.AnalyzerState;
-import be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseInterface;
 
-public class LightReceiver implements ImageAnalysis.Analyzer {
+public class VLCReceiver implements ImageAnalysis.Analyzer {
 
     // Logging tag
     private static final String TAG = "LightReceiver";
@@ -43,33 +46,34 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                     new Pair<>(Double.MAX_VALUE, 1.075)
             };
 
-    private static final int CHAR_SIZE = 8; // UTF-8
+    private static final int WORD_SIZE = 8; // UTF-8
 
     // Control sequences
     private static final BitSet START_SEQ = BitSet.valueOf(new long[]{0b11111111});
-    private static final BitSet END_SEQ = BitSet.valueOf(new long[]{0b11111111});
     private static double luminosityTolerance;
+
     // Runtime variables
     private boolean analyze;
     private AnalyzerState txState;
     private long lastAnalyzedTimestamp;
     private double initialLumAverage;
     private ArrayList<Double> lastLuminosityValues;
-    private BitSet charBuffer;
-    private String result;
+
+    // Results
+    private BitSet tmpRxBuffer;
     private BitSet resultBuffer;
+    private BitSet seqLengthBuffer;
+    private int numRxWords;
 
     // Sequence numbers
     private long syncSeqNum;
     private long txSeqNum;
     private int syncCharIndex;
     private int txCharIndex;
+    private int sequenceLength;
 
     // Parent activity
     private Activity activity;
-
-    // Firebase
-    private FirebaseInterface firebaseInterface;
 
     // Cropped Rect
     private Rect cropRect;
@@ -78,21 +82,28 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
     private long samplingRate;
     private long timePerFrameMillis;
 
-    public LightReceiver(Activity activity, FirebaseInterface firebaseInterface, Rect cropRect,
-                         long txRate,
-                         long samplingRate) {
+    // Network Utils
+    private NetworkUtils networkUtils;
+    private Hamming74 hamming74;
+
+    // On/Off Keying
+    private boolean onOffKeyingEnabled;
+
+    public VLCReceiver(Activity activity, Rect cropRect,
+                       long txRate,
+                       long samplingRate, boolean onOffKeyingEnabled) {
         this.activity = activity;
-        this.firebaseInterface = firebaseInterface;
         this.cropRect = cropRect;
         this.samplingRate = samplingRate;
+        this.onOffKeyingEnabled = onOffKeyingEnabled;
         timePerFrameMillis = 1000 / (samplingRate * txRate); // Input data on seconds
-        lastLuminosityValues = new ArrayList<>();
-        charBuffer = new BitSet(CHAR_SIZE);
-        resultBuffer = new BitSet();
+        networkUtils = new NetworkUtils();
+        hamming74 = new Hamming74();
 
         Log.i(TAG, "CropRect: " + new Gson().toJson(cropRect));
         Log.i(TAG, "SamplingRate: " + samplingRate);
         Log.i(TAG, "TimePerFrameMillis: " + timePerFrameMillis);
+        Log.i(TAG, "OnOffKeying: " + onOffKeyingEnabled);
 
         reset();
 
@@ -108,8 +119,6 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
         if (currentTimestamp - lastAnalyzedTimestamp >=
                 timePerFrameMillis
                 && analyze) {
-
-            Log.e(TAG, String.valueOf(currentTimestamp));
 
             // Update timestamp of last analyzed frame
             long theoreticalTimestamp = lastAnalyzedTimestamp + timePerFrameMillis;
@@ -145,7 +154,7 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
 
                 case WAITING:
                     if (bitIsSet(windowLumAverage)) {
-                        charBuffer.set(syncCharIndex);
+                        tmpRxBuffer.set(syncCharIndex);
                         syncCharIndex++;
                         txState = AnalyzerState.STARTING;
                         activity.runOnUiThread(() -> ((CustomEventListener) activity)
@@ -156,21 +165,19 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                 case STARTING:
                     syncSeqNum++;
                     if (syncSeqNum % samplingRate == 0) {
-                        if (bitIsSet(windowLumAverage)) {
-                            charBuffer.set(Math.toIntExact(syncCharIndex));
-                        }
-                        if (syncCharIndex == CHAR_SIZE - 1) {
-                            if (charBuffer.equals(START_SEQ)) {
+                        tmpRxBuffer.set(Math.toIntExact(syncCharIndex), bitIsSet(windowLumAverage));
+                        if (syncCharIndex == WORD_SIZE - 1) {
+                            if (tmpRxBuffer.equals(START_SEQ)) {
                                 txState = AnalyzerState.TX_STARTED;
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
                                         .onAnalyzerEvent(AnalyzerState.TX_STARTED, null));
                             } else {
                                 Log.i(TAG, txState.toString() + " - START_SEQ - Wrong -> " +
-                                        Integer.toBinaryString((int) charBuffer.toLongArray()[0]));
+                                        Integer.toBinaryString((int) tmpRxBuffer.toLongArray()[0]));
                                 activity.runOnUiThread(() -> Toast
                                         .makeText(activity.getApplicationContext(),
                                                 Integer.toBinaryString(
-                                                        (int) charBuffer.toLongArray()[0]),
+                                                        (int) tmpRxBuffer.toLongArray()[0]),
                                                 Toast.LENGTH_LONG).show());
                                 try {
                                     Thread.sleep(5000);
@@ -179,7 +186,7 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                                 }
                                 syncSeqNum = 0;
                                 syncCharIndex = 0;
-                                charBuffer.clear();
+                                tmpRxBuffer.clear();
                                 txState = AnalyzerState.WAITING;
                                 activity.runOnUiThread(() -> ((CustomEventListener) activity)
                                         .onAnalyzerEvent(AnalyzerState.WAITING, null));
@@ -193,33 +200,32 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                 case TX_STARTED:
                     txSeqNum++;
                     if (txSeqNum % samplingRate == 0) {
-                        charBuffer.set(txCharIndex, bitIsSet(windowLumAverage));
+                        tmpRxBuffer.set(txCharIndex, bitIsSet(windowLumAverage));
                         txCharIndex++;
-                        if (txCharIndex == CHAR_SIZE) {
+                        if (txCharIndex == WORD_SIZE) {
                             txCharIndex = 0;
-                            Log.i(TAG,
-                                    new Gson().toJson(Long
-                                            .toBinaryString(charBuffer.toLongArray()[0]))
-                                            + " -> "
-                                            + new String(charBuffer.toByteArray(),
-                                            StandardCharsets.UTF_8)
-                            );
-                            if (!charBuffer.equals(END_SEQ)) {
-                                for (int i = 0; i < 8; i++) {
-                                    resultBuffer.set(result.length() * CHAR_SIZE + i,
-                                            charBuffer.get(i));
+                            Log.i(TAG, String.format("%8s",
+                                    Long.toBinaryString(tmpRxBuffer.toLongArray()[0]))
+                                    .replace(' ', '0') + " (" + numRxWords + ")");
+                            numRxWords++;
+                            if (sequenceLength == 0) {
+                                for (int i = 0; i < WORD_SIZE; i++) {
+                                    seqLengthBuffer
+                                            .set(numRxWords * WORD_SIZE + i, tmpRxBuffer.get(i));
                                 }
-                                firebaseInterface.setAndroidResult(
-                                        result += new String(charBuffer.toByteArray(),
-                                                StandardCharsets.UTF_8));
-                                charBuffer.clear();
+                                if (numRxWords == 2) {
+                                    sequenceLength = parseLength(seqLengthBuffer);
+                                    numRxWords = 0;
+                                }
                             } else {
-                                // Send last event
-                                txState = AnalyzerState.TX_ENDED;
-                                activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                                        .onAnalyzerEvent(AnalyzerState.TX_ENDED, result));
-                                Log.i(TAG, "RX_DATA: " + result);
-                                reset();
+                                for (int i = 0; i < WORD_SIZE; i++) {
+                                    resultBuffer
+                                            .set(numRxWords * WORD_SIZE + i, tmpRxBuffer.get(i));
+                                }
+                                if (numRxWords == sequenceLength) {
+                                    Log.i(TAG, "Reached end of sequence.");
+                                    endRx();
+                                }
                             }
                         }
                     }
@@ -234,11 +240,67 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
         }
     }
 
+    private void endRx() {
+        // Send last event
+        txState = AnalyzerState.TX_ENDED;
+        // Calculate CRC
+        int crcInitPos = (numRxWords - 4) * WORD_SIZE;
+        int crcEndPos = numRxWords * WORD_SIZE;
+
+        if (crcInitPos < 0) {
+            activity.runOnUiThread(() -> ((CustomEventListener) activity)
+                    .onAnalyzerEvent(AnalyzerState.TX_ERROR, resultBuffer.toByteArray()));
+            return;
+        }
+
+        byte[] rxCrc = resultBuffer.get(crcInitPos, crcEndPos).toByteArray();
+        Object[] rxCrcObj = {rxCrc};
+        resultBuffer.clear(crcInitPos, crcEndPos);
+        byte[] calcCrc = networkUtils.calculateCRC(resultBuffer).toByteArray();
+        Object[] calcCrcObj = {calcCrc};
+
+        Log.i(TAG, "RX_DATA: " + Hex.encodeHexString(resultBuffer.toByteArray()));
+        Log.i(TAG, "RX_CRC: " + Hex.encodeHexString(rxCrc));
+        Log.i(TAG, "CALC_CRC: " + Hex.encodeHexString(calcCrc));
+
+        if (Arrays.deepEquals(rxCrcObj, calcCrcObj)) {
+            activity.runOnUiThread(() -> ((CustomEventListener) activity)
+                    .onAnalyzerEvent(AnalyzerState.TX_ENDED, hamming74.decodeByteArray(resultBuffer.toByteArray())));
+        } else {
+            activity.runOnUiThread(() -> ((CustomEventListener) activity)
+                    .onAnalyzerEvent(AnalyzerState.TX_ERROR, hamming74.decodeByteArray(resultBuffer.toByteArray())));
+        }
+    }
+
     private Boolean bitIsSet(double windowLumAverage) {
+        return onOffKeyingEnabled ? bitIsSetOOK(windowLumAverage) : bitIsSetAverage(windowLumAverage);
+    }
+
+    private Boolean bitIsSetAverage(double windowLumAverage) {
         Boolean ret = windowLumAverage / initialLumAverage > luminosityTolerance;
-        Log.d(TAG, txState.toString() + " - BitIsSet: " + ret.toString() + " -> " +
+        Log.d(TAG, txState.toString() + " - BitIsSet: " + (ret ? 1 : 0) + " -> " +
                 String.format("%.2f", windowLumAverage / initialLumAverage) + "(" +
                 String.format("%.2f", windowLumAverage) + ")" + " - SCI: " + syncCharIndex);
+        return ret;
+    }
+
+    private Boolean bitIsSetOOK(double windowLumAverage) {
+        // Index 0 is false and index 1 is true
+        int[] counts = new int[]{0, 0};
+        for (double lumValue : lastLuminosityValues) {
+            if (lumValue / initialLumAverage > luminosityTolerance) {
+                counts[1] = counts[1] + 1;
+            } else {
+                counts[0] = counts[0] + 1;
+            }
+        }
+
+        Boolean ret = counts[1] > counts[0];
+
+        Log.d(TAG, txState.toString() + " - BitIsSet: " + ret.toString() + " -> " +
+                String.format("%.2f", windowLumAverage / initialLumAverage) + "(" +
+                String.format("%.2f", windowLumAverage) + "), " + "(" + counts[1] + " / " +
+                (counts[0] + counts[1] + ")" + " - SCI: " + syncCharIndex));
         return ret;
     }
 
@@ -281,14 +343,18 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
                 ret.add(data[i]);
             }
         }
-        //Log.e(TAG, "Init Len: " + len + ", Final Len: " + ret.size());
+        Log.e(TAG, "Init Len: " + len + ", Final Len: " + ret.size());
         return ret;
     }
 
     private void reset() {
         txState = AnalyzerState.TX_ENDED;
-        lastAnalyzedTimestamp = 0L;
+        lastLuminosityValues = new ArrayList<>();
+        tmpRxBuffer = new BitSet(WORD_SIZE);
+        resultBuffer = new BitSet();
+        seqLengthBuffer = new BitSet();
         lastLuminosityValues.clear();
+        lastAnalyzedTimestamp = 0L;
         initialLumAverage = 0;
         luminosityTolerance = 0;
         syncSeqNum = 0;
@@ -296,18 +362,27 @@ public class LightReceiver implements ImageAnalysis.Analyzer {
         syncCharIndex = 0;
         txCharIndex = 0;
         resultBuffer.clear();
-        charBuffer.clear();
-        result = "";
+        tmpRxBuffer.clear();
+        numRxWords = 0;
+        sequenceLength = 0;
         analyze = false;
     }
 
-    public void updateParams(Rect cropRect, long txRate, long samplingRate) {
+    private int parseLength(BitSet seqLengthBuffer) {
+        byte[] seqLenBytes = seqLengthBuffer.toByteArray();
+        return seqLenBytes.length == 2 ? ((seqLenBytes[1] & 0xff) << 8) | (seqLenBytes[0] & 0xff) :
+               (seqLenBytes[0] & 0xff);
+    }
+
+    public void updateParams(Rect cropRect, long txRate, long samplingRate, boolean onOffKeying) {
         this.cropRect = cropRect;
         this.samplingRate = samplingRate;
+        this.onOffKeyingEnabled = onOffKeying;
         timePerFrameMillis = 1000 / (samplingRate * txRate); // Input data on seconds
         Log.i(TAG, "CropRect: " + new Gson().toJson(cropRect));
         Log.i(TAG, "SamplingRate: " + samplingRate);
         Log.i(TAG, "TimePerFrameMillis: " + timePerFrameMillis);
+        Log.i(TAG, "OnOffKeying: " + onOffKeying);
 
         reset();
     }

@@ -6,6 +6,7 @@ import android.graphics.Rect;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.RadioGroup;
@@ -36,6 +37,8 @@ import androidx.core.content.ContextCompat;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.gson.Gson;
 
+import java.nio.charset.StandardCharsets;
+import java.util.BitSet;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -50,8 +53,8 @@ import be.kuleuven.mt_ibai_vlc.model.enums.AndroidState;
 import be.kuleuven.mt_ibai_vlc.model.enums.MicroState;
 import be.kuleuven.mt_ibai_vlc.model.enums.TxMode;
 import be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseInterface;
-import be.kuleuven.mt_ibai_vlc.network.vlc.receiver.LightReceiver;
-import be.kuleuven.mt_ibai_vlc.network.vlc.sender.LightSender;
+import be.kuleuven.mt_ibai_vlc.network.vlc.VLCReceiver;
+import be.kuleuven.mt_ibai_vlc.network.vlc.VLCSender;
 
 
 public class MainActivity extends AppCompatActivity
@@ -76,6 +79,8 @@ public class MainActivity extends AppCompatActivity
     private EditText txDistanceEditText;
     private EditText numberOfSamplesEditText;
     private Button txStartButton;
+    private CheckBox hammingEnabledCB;
+    private CheckBox onOffKeyingCB;
 
     private TextView txResultTextView;
     private TextView txAccuracyTextView;
@@ -88,8 +93,8 @@ public class MainActivity extends AppCompatActivity
     private FirebaseInterface firebaseInterface;
 
     // LightSender
-    private LightSender lightSender;
-    private LightReceiver analyzer;
+    private VLCSender VLCSender;
+    private VLCReceiver analyzer;
 
     // LogItem
     private LogItem logItem;
@@ -180,7 +185,7 @@ public class MainActivity extends AppCompatActivity
                 }
 
 
-                lightSender = new LightSender(cameraControl, firebaseInterface, this);
+                VLCSender = new VLCSender(cameraControl, firebaseInterface, this);
 
                 // Setup completed
                 firebaseInterface.setAndroidState(AndroidState.WAITING_FOR_START);
@@ -231,8 +236,8 @@ public class MainActivity extends AppCompatActivity
         //Rect cropRect = new Rect(0, 0, 640, 480);
 
         if (analyzer == null) {
-            analyzer = new LightReceiver(this, firebaseInterface, cropRect,
-                    firebaseInterface.getTxRate(), firebaseInterface.getNumberOfSamples());
+            analyzer = new VLCReceiver(this, cropRect,
+                    firebaseInterface.getTxRate(), firebaseInterface.getNumberOfSamples(), firebaseInterface.isOnOffKeying());
             while (imageAnalysis == null) {
                 Toast.makeText(getApplicationContext(), "Initializing camera...",
                         Toast.LENGTH_SHORT).show();
@@ -240,7 +245,7 @@ public class MainActivity extends AppCompatActivity
             imageAnalysis.setAnalyzer(executor, analyzer);
         } else {
             analyzer.updateParams(cropRect, firebaseInterface.getTxRate(),
-                    firebaseInterface.getNumberOfSamples());
+                    firebaseInterface.getNumberOfSamples(), firebaseInterface.isOnOffKeying());
             analyzer.setEnabled(true);
         }
     }
@@ -318,11 +323,15 @@ public class MainActivity extends AppCompatActivity
                     firebaseInterface.setTxRate(txRate);
                     firebaseInterface.setNumberOfSamples(numberOfSamples);
                     firebaseInterface.setDistance(distance);
+                    firebaseInterface.setHammingEnabled(hammingEnabledCB.isChecked());
+                    firebaseInterface.setOnOffKeying(onOffKeyingCB.isChecked());
                     txStartButton.setEnabled(false);
                     txDataEditText.setEnabled(false);
                     txRateEditText.setEnabled(false);
                     txDistanceEditText.setEnabled(false);
                     numberOfSamplesEditText.setEnabled(false);
+                    hammingEnabledCB.setEnabled(false);
+                    onOffKeyingCB.setEnabled(false);
                 }
             }
         });
@@ -331,6 +340,8 @@ public class MainActivity extends AppCompatActivity
                 .setEnabled(checkedId == R.id.txModeMicroAndroid));
         txResultTextView = findViewById(R.id.txResultTextView);
         txAccuracyTextView = findViewById(R.id.txAccuracyTextView);
+        hammingEnabledCB = findViewById(R.id.hammingEnabledCB);
+        onOffKeyingCB = findViewById(R.id.onOffKeyingCB);
         cameraProviderFuture = ProcessCameraProvider.getInstance(this);
     }
 
@@ -341,15 +352,15 @@ public class MainActivity extends AppCompatActivity
     }
 
     @Override
-    public void onAnalyzerEvent(AnalyzerState eventCode, @Nullable String info) {
-        String text = info != null ? eventCode + " -> " + info : eventCode.toString();
+    public void onAnalyzerEvent(AnalyzerState eventCode, @Nullable byte[] info) {
+        String text = eventCode.toString();
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
         switch (eventCode) {
             case WAITING:
                 firebaseInterface.setAndroidState(AndroidState.RX_STARTING);
                 break;
             case TX_ENDED:
-                endRx(info);
+                endRx(new String(info, StandardCharsets.UTF_8));
                 break;
         }
     }
@@ -402,9 +413,11 @@ public class MainActivity extends AppCompatActivity
         firebaseInterface.setAndroidState(AndroidState.TX_STARTING);
         initLog();
         firebaseInterface.setAndroidState(AndroidState.TX_STARTED);
-        lightSender.setParams(firebaseInterface.getTxData(), firebaseInterface.getTxRate());
+        VLCSender.setParams(
+                BitSet.valueOf(firebaseInterface.getTxData().getBytes(StandardCharsets.UTF_8)),
+                firebaseInterface.getTxRate(), firebaseInterface.isHammingEnabled());
 
-        new Thread(lightSender).start();
+        new Thread(VLCSender).start();
 
     }
 
@@ -419,7 +432,8 @@ public class MainActivity extends AppCompatActivity
         long numberOfSamples = firebaseInterface.getNumberOfSamples();
         int distance = firebaseInterface.getDistance();
         long time = System.currentTimeMillis();
-        logItem = new LogItem(txData, time, txMode, txRate, numberOfSamples, distance);
+        boolean hammingEnabled = firebaseInterface.isHammingEnabled();
+        logItem = new LogItem(txData, time, txMode, txRate, numberOfSamples, distance, hammingEnabled);
     }
 
     public void saveResults() {
@@ -460,12 +474,14 @@ public class MainActivity extends AppCompatActivity
         txDataEditText.setEnabled(true);
         txRateEditText.setEnabled(true);
         txDistanceEditText.setEnabled(true);
+        hammingEnabledCB.setEnabled(true);
+        onOffKeyingCB.setEnabled(true);
         numberOfSamplesEditText
                 .setEnabled(txModeRadioGroup.getCheckedRadioButtonId() == R.id.txModeMicroAndroid);
         if (firebaseInterface.getTxMode() == TxMode.MICRO_ANDROID) {
             stopAnalysis();
         } else {
-            lightSender.setEnabled(false);
+            VLCSender.setEnabled(false);
         }
 
     }

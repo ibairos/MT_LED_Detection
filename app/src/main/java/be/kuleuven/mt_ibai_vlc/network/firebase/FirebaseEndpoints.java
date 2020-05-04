@@ -13,4 +13,7 @@ class FirebaseEndpoints {
     static final String TX_MODE = "tx_mode";
     static final String TX_RATE = "tx_rate";
     static final String SAMPLE_NUM = "sample_num";
+    static final String HAMMING_ENABLED = "hamming_enabled";
+    static final String ON_OFF_KEYING = "on_off_keying";
+
 }

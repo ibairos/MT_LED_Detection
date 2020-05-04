@@ -28,5 +28,7 @@
     <string name="empty_sampling_rate">Empty sampling rate!</string>
     <string name="rate_not_number">Rate is not a number!</string>
     <string name="sampling_rate_not_number">Sampling rate is not a number!</string>
+    <string name="hamming74">Hamming(7,4)</string>
+    <string name="on_off_keying">On/Off Keying</string>
 
 </resources>

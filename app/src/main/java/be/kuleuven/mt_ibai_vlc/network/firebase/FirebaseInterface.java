@@ -25,8 +25,10 @@ import be.kuleuven.mt_ibai_vlc.model.enums.TxMode;
 
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.ANDROID;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.COMMON;
+import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.HAMMING_ENABLED;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.LOGS;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.MICRO;
+import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.ON_OFF_KEYING;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.RESULT;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.SAMPLE_NUM;
 import static be.kuleuven.mt_ibai_vlc.network.firebase.FirebaseEndpoints.STATE;
@@ -53,6 +55,9 @@ public class FirebaseInterface {
     private long txRate;
     private long numberOfSamples;
     private Integer distance;
+    private boolean hammingEnabled;
+    private boolean onOffKeying;
+
 
     public FirebaseInterface(Activity activity) {
         this.activity = activity;
@@ -164,6 +169,28 @@ public class FirebaseInterface {
                         Log.e(TAG, "Failed to read value NumberOfSamples");
                     }
                 });
+        myRef.child(VARIABLES).child(COMMON).child(HAMMING_ENABLED)
+                .addValueEventListener(new ValueEventListener() {
+                    @Override public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                        hammingEnabled = (boolean) dataSnapshot.getValue();
+                        Log.d(TAG, "hammingEnabled: " + hammingEnabled);
+                    }
+
+                    @Override public void onCancelled(@NonNull DatabaseError databaseError) {
+                        Log.e(TAG, "Failed to read value hammingEnabled");
+                    }
+                });
+        myRef.child(VARIABLES).child(COMMON).child(ON_OFF_KEYING)
+                .addValueEventListener(new ValueEventListener() {
+                    @Override public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                        onOffKeying = (boolean) dataSnapshot.getValue();
+                        Log.d(TAG, "onOffKeying: " + onOffKeying);
+                    }
+
+                    @Override public void onCancelled(@NonNull DatabaseError databaseError) {
+                        Log.e(TAG, "Failed to read value onOffKeying");
+                    }
+                });
     }
 
     public AndroidState getAndroidState() {
@@ -255,6 +282,26 @@ public class FirebaseInterface {
         this.distance = distance;
     }
 
+    public boolean isHammingEnabled() {
+        return hammingEnabled;
+    }
+
+    public void setHammingEnabled(boolean hammingEnabled) {
+        this.hammingEnabled = hammingEnabled;
+        myRef.child(VARIABLES).child(COMMON).child(HAMMING_ENABLED)
+                .setValue(hammingEnabled);
+    }
+
+    public boolean isOnOffKeying() {
+        return onOffKeying;
+    }
+
+    public void setOnOffKeying(boolean onOffKeying) {
+        this.onOffKeying = onOffKeying;
+        myRef.child(VARIABLES).child(COMMON).child(ON_OFF_KEYING)
+                .setValue(onOffKeying);
+    }
+
     public void pushLog(LogItem logItem) {
         String key = myRef.child(LOGS).push().getKey();
         Map<String, Object> postValues = logItem.toMap();
@@ -264,6 +311,4 @@ public class FirebaseInterface {
 
         myRef.updateChildren(childUpdates);
     }
-
-
 }

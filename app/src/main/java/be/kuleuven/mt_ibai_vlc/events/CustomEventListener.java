@@ -7,7 +7,7 @@ import be.kuleuven.mt_ibai_vlc.model.enums.MicroState;
 
 public interface CustomEventListener {
 
-    void onAnalyzerEvent(AnalyzerState eventCode, @Nullable String info);
+    void onAnalyzerEvent(AnalyzerState eventCode, @Nullable byte[] info);
 
     void microStateChanged(MicroState state);
 

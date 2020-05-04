@@ -45,4 +45,8 @@ dependencies {
     implementation 'com.google.firebase:firebase-analytics:17.4.0'
     // Apache Commons Text
     implementation 'org.apache.commons:commons-text:1.8'
+    // EJML
+    implementation 'org.ejml:ejml-all:0.39'
+    // Apache
+    implementation 'commons-codec:commons-codec:1.14'
 }

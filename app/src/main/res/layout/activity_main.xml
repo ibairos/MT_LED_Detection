@@ -144,6 +144,24 @@
                 android:text="@string/reset" />
         </LinearLayout>
 
+        <CheckBox
+            android:id="@+id/hammingEnabledCB"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/hamming74"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/txModeLayout"
+            app:layout_constraintTop_toTopOf="@+id/txModeLayout" />
+
+        <CheckBox
+            android:id="@+id/onOffKeyingCB"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/on_off_keying"
+            app:layout_constraintBottom_toBottomOf="@+id/txModeLayout"
+            app:layout_constraintStart_toStartOf="@+id/hammingEnabledCB"
+            app:layout_constraintTop_toBottomOf="@+id/hammingEnabledCB" />
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <androidx.constraintlayout.widget.ConstraintLayout
