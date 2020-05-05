@@ -62,7 +62,6 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
     // Results
     private BitSet tmpRxBuffer;
     private BitSet resultBuffer;
-    private BitSet seqLengthBuffer;
     private int numRxWords;
 
     // Sequence numbers
@@ -210,13 +209,11 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
                             numRxWords++;
                             if (sequenceLength == 0) {
                                 for (int i = 0; i < WORD_SIZE; i++) {
-                                    seqLengthBuffer
-                                            .set(numRxWords * WORD_SIZE + i, tmpRxBuffer.get(i));
                                     resultBuffer
                                             .set(numRxWords * WORD_SIZE + i, tmpRxBuffer.get(i));
                                 }
                                 if (numRxWords == 2) {
-                                    sequenceLength = parseLength(seqLengthBuffer);
+                                    sequenceLength = parseLength(resultBuffer);
                                 }
                             } else {
                                 for (int i = 0; i < WORD_SIZE; i++) {
@@ -355,7 +352,6 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
         lastLuminosityValues = new ArrayList<>();
         tmpRxBuffer = new BitSet(WORD_SIZE);
         resultBuffer = new BitSet();
-        seqLengthBuffer = new BitSet();
         lastLuminosityValues.clear();
         lastAnalyzedTimestamp = 0L;
         initialLumAverage = 0;
