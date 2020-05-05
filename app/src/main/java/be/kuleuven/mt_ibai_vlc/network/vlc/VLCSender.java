@@ -125,7 +125,7 @@ public class VLCSender implements Runnable {
     public void setParams(BitSet sequence, long txRate, boolean hamming) {
         // Calculate length and CRC and append it to sequence
         this.sequence =
-                hamming ? addCRC(BitSet.valueOf(hamming74.encodeByteArray(sequence.toByteArray())))
+                hamming ? addCRC(addLength(BitSet.valueOf(hamming74.encodeByteArray(sequence.toByteArray()))))
                         : addCRC(addLength(sequence));
         this.txRate = txRate;
         enabled = true;

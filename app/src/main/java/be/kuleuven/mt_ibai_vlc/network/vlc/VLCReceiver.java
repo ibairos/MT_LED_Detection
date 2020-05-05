@@ -212,17 +212,18 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
                                 for (int i = 0; i < WORD_SIZE; i++) {
                                     seqLengthBuffer
                                             .set(numRxWords * WORD_SIZE + i, tmpRxBuffer.get(i));
+                                    resultBuffer
+                                            .set(numRxWords * WORD_SIZE + i, tmpRxBuffer.get(i));
                                 }
                                 if (numRxWords == 2) {
                                     sequenceLength = parseLength(seqLengthBuffer);
-                                    numRxWords = 0;
                                 }
                             } else {
                                 for (int i = 0; i < WORD_SIZE; i++) {
                                     resultBuffer
                                             .set(numRxWords * WORD_SIZE + i, tmpRxBuffer.get(i));
                                 }
-                                if (numRxWords == sequenceLength) {
+                                if (numRxWords == sequenceLength + 2) {
                                     Log.i(TAG, "Reached end of sequence.");
                                     endRx();
                                 }
@@ -259,16 +260,18 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
         byte[] calcCrc = networkUtils.calculateCRC(resultBuffer).toByteArray();
         Object[] calcCrcObj = {calcCrc};
 
-        Log.i(TAG, "RX_DATA: " + Hex.encodeHexString(resultBuffer.toByteArray()));
+        BitSet rxData = resultBuffer.get(2 * WORD_SIZE, crcInitPos);
+
+        Log.i(TAG, "RX_DATA: " + Hex.encodeHexString(rxData.toByteArray()));
         Log.i(TAG, "RX_CRC: " + Hex.encodeHexString(rxCrc));
         Log.i(TAG, "CALC_CRC: " + Hex.encodeHexString(calcCrc));
 
         if (Arrays.deepEquals(rxCrcObj, calcCrcObj)) {
             activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                    .onAnalyzerEvent(AnalyzerState.TX_ENDED, hamming74.decodeByteArray(resultBuffer.toByteArray())));
+                    .onAnalyzerEvent(AnalyzerState.TX_ENDED, hamming74.decodeByteArray(rxData.toByteArray())));
         } else {
             activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                    .onAnalyzerEvent(AnalyzerState.TX_ERROR, hamming74.decodeByteArray(resultBuffer.toByteArray())));
+                    .onAnalyzerEvent(AnalyzerState.TX_ERROR, hamming74.decodeByteArray(rxData.toByteArray())));
         }
     }
 
