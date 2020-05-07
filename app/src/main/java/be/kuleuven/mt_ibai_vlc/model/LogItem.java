@@ -39,8 +39,10 @@ public class LogItem {
 
     private boolean hamming_enabled;
 
+    private boolean on_off_keying;
+
     public LogItem(String tx_data, long time,
-                   TxMode tx_mode, long tx_rate, long sample_num, int distance, boolean hamming_enabled) {
+                   TxMode tx_mode, long tx_rate, long sample_num, int distance, boolean hamming_enabled, boolean on_off_keying) {
         this.tx_data = tx_data;
         tx_data_bin = textToBinaryString(tx_data);
         this.time = time;
@@ -49,6 +51,7 @@ public class LogItem {
         this.sample_num = sample_num;
         this.distance = distance;
         this.hamming_enabled = hamming_enabled;
+        this.on_off_keying = on_off_keying;
     }
 
     @Exclude
@@ -66,6 +69,7 @@ public class LogItem {
         result.put("sample_num", sample_num);
         result.put("distance", distance);
         result.put("hamming_enabled", hamming_enabled);
+        result.put("on_off_keying", on_off_keying);
 
         return result;
     }
@@ -125,6 +129,7 @@ public class LogItem {
     }
 
     private String textToBinaryString(String text) {
+        if (text == null) return "";
         StringBuilder s = new StringBuilder();
         for (byte b : BitSet.valueOf(text.getBytes(StandardCharsets.UTF_8)).toByteArray()) {
             s.append(String.format("%8s",

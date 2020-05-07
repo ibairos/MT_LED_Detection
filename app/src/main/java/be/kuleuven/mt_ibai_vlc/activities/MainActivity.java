@@ -10,6 +10,7 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.RadioGroup;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -46,6 +47,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import be.kuleuven.mt_ibai_vlc.R;
+import be.kuleuven.mt_ibai_vlc.common.Hamming74;
 import be.kuleuven.mt_ibai_vlc.events.CustomEventListener;
 import be.kuleuven.mt_ibai_vlc.model.LogItem;
 import be.kuleuven.mt_ibai_vlc.model.enums.AnalyzerState;
@@ -81,6 +83,7 @@ public class MainActivity extends AppCompatActivity
     private Button txStartButton;
     private CheckBox hammingEnabledCB;
     private CheckBox onOffKeyingCB;
+    private SeekBar zoomSeekBar;
 
     private TextView txResultTextView;
     private TextView txAccuracyTextView;
@@ -112,6 +115,7 @@ public class MainActivity extends AppCompatActivity
         setContentView(R.layout.activity_main);
         setupUI();
         setupFirebaseData();
+        new Hamming74();
     }
 
     @Override
@@ -164,6 +168,10 @@ public class MainActivity extends AppCompatActivity
 
                 Camera camera = bindPreviewAndAnalysis(cameraProvider, cameraSelector);
 
+                cameraControl = camera.getCameraControl();
+                cameraInfo = camera.getCameraInfo();
+
+                /*
                 MeteringPointFactory factory =
                         new SurfaceOrientedMeteringPointFactory(IMAGE_WIDTH, IMAGE_HEIGHT);
                 MeteringPoint point = factory.createPoint((float) cameraView.getWidth() / 2,
@@ -173,23 +181,34 @@ public class MainActivity extends AppCompatActivity
                                 .setAutoCancelDuration(20, TimeUnit.SECONDS)
                                 .build();
 
-                cameraControl = camera.getCameraControl();
-                cameraInfo = camera.getCameraInfo();
+                ListenableFuture future = cameraControl.startFocusAndMetering(action);
+                future.addListener(() -> {
+                    try {
+                        cameraControl.startFocusAndMetering(action);
+                    } catch (Exception ignored) {
+                    }
+                }, executor);
+                */
 
-                if (Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMaxZoomRatio() <
-                        4.0) {
+                float maxZoomRatio = Objects.requireNonNull(cameraInfo.getZoomState().getValue()).getMaxZoomRatio();
+
+                if (maxZoomRatio < 2.0) {
                     cameraControl
                             .setZoomRatio(cameraInfo.getZoomState().getValue().getMaxZoomRatio());
                 } else {
-                    cameraControl.setZoomRatio(4f);
+                    cameraControl.setZoomRatio(2f);
                 }
 
+                zoomSeekBar.setMax((int) (maxZoomRatio * 10));
+
+                Log.i(TAG, "MAX_ZOOM: " + maxZoomRatio);
 
                 VLCSender = new VLCSender(cameraControl, firebaseInterface, this);
 
                 // Setup completed
                 firebaseInterface.setAndroidState(AndroidState.WAITING_FOR_START);
                 cameraUp = true;
+
             } catch (ExecutionException | InterruptedException e) {
                 System.exit(1);
             }
@@ -237,7 +256,8 @@ public class MainActivity extends AppCompatActivity
 
         if (analyzer == null) {
             analyzer = new VLCReceiver(this, cropRect,
-                    firebaseInterface.getTxRate(), firebaseInterface.getNumberOfSamples(), firebaseInterface.isOnOffKeying());
+                    firebaseInterface.getTxRate(), firebaseInterface.getNumberOfSamples(),
+                    firebaseInterface.isOnOffKeying(), firebaseInterface.isHammingEnabled());
             while (imageAnalysis == null) {
                 Toast.makeText(getApplicationContext(), "Initializing camera...",
                         Toast.LENGTH_SHORT).show();
@@ -245,7 +265,7 @@ public class MainActivity extends AppCompatActivity
             imageAnalysis.setAnalyzer(executor, analyzer);
         } else {
             analyzer.updateParams(cropRect, firebaseInterface.getTxRate(),
-                    firebaseInterface.getNumberOfSamples(), firebaseInterface.isOnOffKeying());
+                    firebaseInterface.getNumberOfSamples(), firebaseInterface.isOnOffKeying(), firebaseInterface.isHammingEnabled());
             analyzer.setEnabled(true);
         }
     }
@@ -290,24 +310,24 @@ public class MainActivity extends AppCompatActivity
                             txModeRadioGroup.getCheckedRadioButtonId() == R.id.txModeMicroAndroid
                             ? TxMode.MICRO_ANDROID : TxMode.ANDROID_MICRO;
                     int numberOfSamples;
-                    if (txMode == TxMode.MICRO_ANDROID) {
-                        if (numberOfSamplesEditText.getText().toString().isEmpty()) {
-                            Toast.makeText(getApplicationContext(), R.string.empty_rate,
-                                    Toast.LENGTH_LONG).show();
-                            return;
-                        }
-                        try {
-                            numberOfSamples =
-                                    Integer.parseInt(numberOfSamplesEditText.getText().toString());
-                        } catch (NumberFormatException e) {
-                            Toast.makeText(getApplicationContext(),
-                                    R.string.sampling_rate_not_number,
-                                    Toast.LENGTH_LONG).show();
-                            return;
-                        }
-                    } else {
-                        numberOfSamples = 1;
+                    if (numberOfSamplesEditText.getText().toString().isEmpty()) {
+                        Toast.makeText(getApplicationContext(), R.string.empty_rate,
+                                Toast.LENGTH_LONG).show();
+                        return;
                     }
+                    try {
+                        numberOfSamples =
+                                Integer.parseInt(numberOfSamplesEditText.getText().toString());
+                    } catch (NumberFormatException e) {
+                        Toast.makeText(getApplicationContext(),
+                                R.string.sampling_rate_not_number,
+                                Toast.LENGTH_LONG).show();
+                        return;
+                    }
+
+                    boolean onOffKeying = onOffKeyingCB.isChecked();
+
+                    numberOfSamples = onOffKeying && numberOfSamples % 2 == 0 ? 3 : numberOfSamples;
 
                     Integer distance = txDistanceEditText.getText().toString().isEmpty()
                                        ? 50
@@ -324,7 +344,7 @@ public class MainActivity extends AppCompatActivity
                     firebaseInterface.setNumberOfSamples(numberOfSamples);
                     firebaseInterface.setDistance(distance);
                     firebaseInterface.setHammingEnabled(hammingEnabledCB.isChecked());
-                    firebaseInterface.setOnOffKeying(onOffKeyingCB.isChecked());
+                    firebaseInterface.setOnOffKeying(onOffKeying);
                     txStartButton.setEnabled(false);
                     txDataEditText.setEnabled(false);
                     txRateEditText.setEnabled(false);
@@ -336,12 +356,27 @@ public class MainActivity extends AppCompatActivity
             }
         });
         findViewById(R.id.resetButton).setOnClickListener(v -> reset());
-        txModeRadioGroup.setOnCheckedChangeListener((group, checkedId) -> numberOfSamplesEditText
-                .setEnabled(checkedId == R.id.txModeMicroAndroid));
         txResultTextView = findViewById(R.id.txResultTextView);
         txAccuracyTextView = findViewById(R.id.txAccuracyTextView);
         hammingEnabledCB = findViewById(R.id.hammingEnabledCB);
         onOffKeyingCB = findViewById(R.id.onOffKeyingCB);
+        zoomSeekBar = findViewById(R.id.zoomSeekBar);
+        zoomSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    cameraControl.setZoomRatio((float) progress / 10);
+                }
+            }
+
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {
+
+            }
+
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+
+            }
+        });
         cameraProviderFuture = ProcessCameraProvider.getInstance(this);
     }
 
@@ -360,6 +395,7 @@ public class MainActivity extends AppCompatActivity
                 firebaseInterface.setAndroidState(AndroidState.RX_STARTING);
                 break;
             case TX_ENDED:
+            case TX_ERROR:
                 endRx(new String(info, StandardCharsets.UTF_8));
                 break;
         }
@@ -380,13 +416,6 @@ public class MainActivity extends AppCompatActivity
                     startTx();
                 }
                 break;
-            case TX_ENDED:
-                if (firebaseInterface.getAndroidState().equals(AndroidState.RX_STARTING)
-                        || firebaseInterface.getAndroidState().equals(AndroidState.RX_STARTED)) {
-                    endRx(firebaseInterface.getAndroidResult());
-                }
-                break;
-            case RX_ENDED:
             case EXIT:
                 if (firebaseInterface.getAndroidState().equals(AndroidState.TX_ENDED)) {
                     endTx();
@@ -433,7 +462,9 @@ public class MainActivity extends AppCompatActivity
         int distance = firebaseInterface.getDistance();
         long time = System.currentTimeMillis();
         boolean hammingEnabled = firebaseInterface.isHammingEnabled();
-        logItem = new LogItem(txData, time, txMode, txRate, numberOfSamples, distance, hammingEnabled);
+        boolean onOffKeying = firebaseInterface.isOnOffKeying();
+        logItem = new LogItem(txData, time, txMode, txRate, numberOfSamples, distance,
+                hammingEnabled, onOffKeying);
     }
 
     public void saveResults() {
@@ -476,8 +507,7 @@ public class MainActivity extends AppCompatActivity
         txDistanceEditText.setEnabled(true);
         hammingEnabledCB.setEnabled(true);
         onOffKeyingCB.setEnabled(true);
-        numberOfSamplesEditText
-                .setEnabled(txModeRadioGroup.getCheckedRadioButtonId() == R.id.txModeMicroAndroid);
+        numberOfSamplesEditText.setEnabled(true);
         if (firebaseInterface.getTxMode() == TxMode.MICRO_ANDROID) {
             stopAnalysis();
         } else {
@@ -489,4 +519,5 @@ public class MainActivity extends AppCompatActivity
     @NonNull @Override public CameraXConfig getCameraXConfig() {
         return Camera2Config.defaultConfig();
     }
+
 }

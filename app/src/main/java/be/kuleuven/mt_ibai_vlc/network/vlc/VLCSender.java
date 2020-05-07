@@ -18,8 +18,9 @@ import static be.kuleuven.mt_ibai_vlc.common.NetworkUtils.WORD_SIZE;
 
 public class VLCSender implements Runnable {
 
-    private static final String TAG = "LightSender";
+    private static final String TAG = "VLCSender";
     private static final BitSet START_SEQ = BitSet.valueOf(new long[]{0b11111111});
+    private final int CRC_LEN = 4;
 
     // Transmission parameters
     private long txRate;
@@ -48,6 +49,7 @@ public class VLCSender implements Runnable {
         this.cameraControl = cameraControl;
         this.firebaseInterface = firebaseInterface;
         this.activity = activity;
+        sequence = new BitSet();
         networkUtils = new NetworkUtils();
         hamming74 = new Hamming74();
         enabled = true;
@@ -66,23 +68,15 @@ public class VLCSender implements Runnable {
 
         Log.i(TAG, "TxSequence : " + Hex.encodeHexString(sequence.toByteArray()));
 
-
         Log.i(TAG, "Blinking start sequence...");
         blinkSequence(START_SEQ, txRate);
         Log.i(TAG, "Blinking message...");
         for (int i = 0; i <= ((sequence.length() - 1) / WORD_SIZE); i++) {
             blinkSequence(sequence.get(i * WORD_SIZE, (i + 1) * WORD_SIZE), txRate);
         }
-
-        try {
-            Thread.sleep(1000 / txRate);
-        } catch (InterruptedException ignored) {
-
-        }
-    }
-
-    private void torchOff() {
+        sleep();
         cameraControl.enableTorch(false);
+        Log.i(TAG, "Tx Ended...");
     }
 
     private void blinkSequence(BitSet sequence, long txRate) {
@@ -125,7 +119,7 @@ public class VLCSender implements Runnable {
     public void setParams(BitSet sequence, long txRate, boolean hamming) {
         // Calculate length and CRC and append it to sequence
         this.sequence =
-                hamming ? addCRC(addLength(BitSet.valueOf(hamming74.encodeByteArray(sequence.toByteArray()))))
+                hamming ? BitSet.valueOf(hamming74.encodeByteArray(addCRC(addLength(sequence)).toByteArray()))
                         : addCRC(addLength(sequence));
         this.txRate = txRate;
         enabled = true;
@@ -135,16 +129,14 @@ public class VLCSender implements Runnable {
         this.enabled = enabled;
         if (!enabled) {
             cameraControl.enableTorch(false);
-            sequence = new BitSet();
+            sequence.clear();
         }
     }
 
     private BitSet addLength(BitSet sequence) {
-        int seqLengthInt = sequence.toByteArray().length;
+        int seqLengthInt = sequence.toByteArray().length + CRC_LEN;
         // The length is stated 2 bytes
-        byte[] seqLength = new byte[2];
-        seqLength[0] = (byte) (seqLengthInt & 0xFF);
-        seqLength[1] = (byte) ((seqLengthInt >> 8) & 0xFF);
+        byte[] seqLength = new byte[]{(byte) (seqLengthInt & 0xFF)};
         // newBitSet will put the length of the sequence and then the sequence itself
         BitSet newBitSet = BitSet.valueOf(seqLength);
         for (int i = 0; i < sequence.length(); i++) {
@@ -161,5 +153,13 @@ public class VLCSender implements Runnable {
             sequence.set(sequenceLength + i, sequenceCRC.get(i));
         }
         return sequence;
+    }
+
+    private void sleep() {
+        try {
+            Thread.sleep(1000 / txRate);
+        } catch (InterruptedException ignored) {
+
+        }
     }
 }

@@ -275,15 +275,55 @@
 
         <LinearLayout
             android:id="@+id/mainCropLayout"
-            android:layout_width="150dp"
-            android:layout_height="150dp"
+            android:layout_width="85dp"
+            android:layout_height="85dp"
             android:background="@drawable/custom_border"
             android:orientation="vertical"
             app:layout_constraintBottom_toBottomOf="@+id/mainCameraView"
             app:layout_constraintEnd_toEndOf="@+id/mainCameraView"
             app:layout_constraintStart_toStartOf="@+id/mainCameraView"
             app:layout_constraintTop_toTopOf="@+id/mainCameraView"
-            app:layout_constraintVertical_bias="0.4" />
+            app:layout_constraintVertical_bias="0.4">
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/mainCropLayoutTV"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/point_at_the_led"
+            android:textAppearance="@style/TextAppearance.AppCompat.Small"
+            android:textColor="#E91E63"
+            app:layout_constraintEnd_toEndOf="@+id/mainCropLayout"
+            app:layout_constraintStart_toStartOf="@+id/mainCropLayout"
+            app:layout_constraintTop_toBottomOf="@+id/mainCropLayout" />
+
+        <SeekBar
+            android:id="@+id/zoomSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="100dp"
+            android:layout_marginBottom="10dp"
+            android:max="60"
+            android:min="10"
+            android:progress="30"
+            android:verticalScrollbarPosition="defaultPosition"
+            app:layout_constraintBottom_toBottomOf="@+id/mainCameraView"
+            app:layout_constraintEnd_toEndOf="@+id/mainCameraView"
+            app:layout_constraintStart_toStartOf="@+id/mainCameraView" />
+
+        <TextView
+            android:id="@+id/zoomTV"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="5dp"
+            android:text="@string/zoom"
+            android:textAppearance="@style/TextAppearance.AppCompat.Small"
+            android:textColor="#E91E63"
+            android:textSize="15sp"
+            app:layout_constraintBottom_toBottomOf="@+id/zoomSeekBar"
+            app:layout_constraintStart_toEndOf="@+id/zoomSeekBar"
+            app:layout_constraintTop_toTopOf="@+id/zoomSeekBar" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </LinearLayout>

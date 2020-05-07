@@ -12,6 +12,8 @@ import java.util.stream.IntStream;
 
 public class Hamming74 {
 
+    public final double ratio = 1.75; // (7 / 4)
+
     private final Map<Integer, Integer> errorMapper = new HashMap<>();
     private final SimpleMatrix g = new SimpleMatrix(
             new double[][]{
@@ -133,7 +135,8 @@ public class Hamming74 {
         for (byte b : in2) {
             s.append(String.format("%8s", Integer.toBinaryString(b & 0xFF)).replace(' ', '0'));
         }
-        return Arrays.stream(s.toString().split("")).map(Double::parseDouble)
+        return Arrays.stream(s.toString().split("")).filter(a -> !a.isEmpty())
+                .map(Double::parseDouble)
                 .collect(Collectors.toList());
     }
 

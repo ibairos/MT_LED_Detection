@@ -30,5 +30,7 @@
     <string name="sampling_rate_not_number">Sampling rate is not a number!</string>
     <string name="hamming74">Hamming(7,4)</string>
     <string name="on_off_keying">On/Off Keying</string>
+    <string name="zoom">Zoom</string>
+    <string name="point_at_the_led">Point at the LED</string>
 
 </resources>

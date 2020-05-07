@@ -30,20 +30,20 @@ import be.kuleuven.mt_ibai_vlc.model.enums.AnalyzerState;
 public class VLCReceiver implements ImageAnalysis.Analyzer {
 
     // Logging tag
-    private static final String TAG = "LightReceiver";
+    private static final String TAG = "VLCReceiver";
 
     // Constant parameters
     private static final Pair[] luminosityToleranceTable =
             new Pair[]{
-                    new Pair<>(80.0, 1.4),
-                    new Pair<>(90.0, 1.3),
-                    new Pair<>(100.0, 1.25),
-                    new Pair<>(110.0, 1.2),
-                    new Pair<>(120.0, 1.175),
-                    new Pair<>(130.0, 1.15),
-                    new Pair<>(140.0, 1.125),
-                    new Pair<>(150.0, 1.1),
-                    new Pair<>(Double.MAX_VALUE, 1.075)
+                    new Pair<>(80.0, 1.25),
+                    new Pair<>(90.0, 1.2),
+                    new Pair<>(100.0, 1.175),
+                    new Pair<>(110.0, 1.15),
+                    new Pair<>(120.0, 1.125),
+                    new Pair<>(130.0, 1.1),
+                    new Pair<>(140.0, 1.075),
+                    new Pair<>(150.0, 1.05),
+                    new Pair<>(Double.MAX_VALUE, 1.025)
             };
 
     private static final int WORD_SIZE = 8; // UTF-8
@@ -53,7 +53,7 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
     private static double luminosityTolerance;
 
     // Runtime variables
-    private boolean analyze;
+    private boolean enabled;
     private AnalyzerState txState;
     private long lastAnalyzedTimestamp;
     private double initialLumAverage;
@@ -88,16 +88,24 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
     // On/Off Keying
     private boolean onOffKeyingEnabled;
 
+    // Hamming enabled
+    private boolean hammingEnabled;
+
     public VLCReceiver(Activity activity, Rect cropRect,
                        long txRate,
-                       long samplingRate, boolean onOffKeyingEnabled) {
+                       long samplingRate, boolean onOffKeyingEnabled, boolean hammingEnabled) {
         this.activity = activity;
         this.cropRect = cropRect;
         this.samplingRate = samplingRate;
         this.onOffKeyingEnabled = onOffKeyingEnabled;
+        this.hammingEnabled = hammingEnabled;
         timePerFrameMillis = 1000 / (samplingRate * txRate); // Input data on seconds
         networkUtils = new NetworkUtils();
         hamming74 = new Hamming74();
+
+        lastLuminosityValues = new ArrayList<>();
+        tmpRxBuffer = new BitSet(WORD_SIZE);
+        resultBuffer = new BitSet();
 
         Log.i(TAG, "CropRect: " + new Gson().toJson(cropRect));
         Log.i(TAG, "SamplingRate: " + samplingRate);
@@ -117,7 +125,7 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
         // Calculate the average luminescence no more often than every FRAME_RATE_SECONDS
         if (currentTimestamp - lastAnalyzedTimestamp >=
                 timePerFrameMillis
-                && analyze) {
+                && enabled) {
 
             // Update timestamp of last analyzed frame
             long theoreticalTimestamp = lastAnalyzedTimestamp + timePerFrameMillis;
@@ -175,14 +183,8 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
                                         Integer.toBinaryString((int) tmpRxBuffer.toLongArray()[0]));
                                 activity.runOnUiThread(() -> Toast
                                         .makeText(activity.getApplicationContext(),
-                                                Integer.toBinaryString(
-                                                        (int) tmpRxBuffer.toLongArray()[0]),
+                                                Arrays.toString(tmpRxBuffer.toByteArray()),
                                                 Toast.LENGTH_LONG).show());
-                                try {
-                                    Thread.sleep(5000);
-                                } catch (InterruptedException e) {
-                                    e.printStackTrace();
-                                }
                                 syncSeqNum = 0;
                                 syncCharIndex = 0;
                                 tmpRxBuffer.clear();
@@ -203,24 +205,26 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
                         txCharIndex++;
                         if (txCharIndex == WORD_SIZE) {
                             txCharIndex = 0;
-                            Log.i(TAG, String.format("%8s",
-                                    Long.toBinaryString(tmpRxBuffer.toLongArray()[0]))
-                                    .replace(' ', '0') + " (" + numRxWords + ")");
+                            long[] aux = tmpRxBuffer.toLongArray();
                             numRxWords++;
+                            Log.i(TAG, String.format("%8s",
+                                    Long.toBinaryString(aux.length > 0 ? aux[0] : 0L))
+                                    .replace(' ', '0') + " (" + numRxWords + ")");
                             if (sequenceLength == 0) {
                                 for (int i = 0; i < WORD_SIZE; i++) {
-                                    resultBuffer
-                                            .set(numRxWords * WORD_SIZE + i, tmpRxBuffer.get(i));
+                                    resultBuffer.set((numRxWords - 1) * WORD_SIZE + i,
+                                            tmpRxBuffer.get(i));
                                 }
-                                if (numRxWords == 2) {
+                                if ((hammingEnabled && numRxWords == 2) ||
+                                        (!hammingEnabled && numRxWords == 1)) {
                                     sequenceLength = parseLength(resultBuffer);
                                 }
                             } else {
                                 for (int i = 0; i < WORD_SIZE; i++) {
-                                    resultBuffer
-                                            .set(numRxWords * WORD_SIZE + i, tmpRxBuffer.get(i));
+                                    resultBuffer.set((numRxWords - 1) * WORD_SIZE + i,
+                                            tmpRxBuffer.get(i));
                                 }
-                                if (numRxWords == sequenceLength + 2) {
+                                if (numRxWords == (hammingEnabled ? 2 : 1) + sequenceLength) {
                                     Log.i(TAG, "Reached end of sequence.");
                                     endRx();
                                 }
@@ -239,48 +243,64 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
     }
 
     private void endRx() {
+
+        Log.i(TAG, "RES_BUFF: " + Hex.encodeHexString(resultBuffer.toByteArray()));
+
+        BitSet resultBuffer = hammingEnabled ? BitSet
+                .valueOf(hamming74.decodeByteArray(this.resultBuffer.toByteArray()))
+                                             : this.resultBuffer;
+        int numRxWords = hammingEnabled ? (int) (this.numRxWords / hamming74.ratio) : this.numRxWords;
+
         // Send last event
         txState = AnalyzerState.TX_ENDED;
         // Calculate CRC
         int crcInitPos = (numRxWords - 4) * WORD_SIZE;
         int crcEndPos = numRxWords * WORD_SIZE;
 
-        if (crcInitPos < 0) {
+        if (crcInitPos < 4) {
             activity.runOnUiThread(() -> ((CustomEventListener) activity)
                     .onAnalyzerEvent(AnalyzerState.TX_ERROR, resultBuffer.toByteArray()));
             return;
         }
 
+        BitSet rxLenAndData = resultBuffer.get(0, crcInitPos);
+        BitSet rxData = resultBuffer.get(WORD_SIZE, crcInitPos);
+
         byte[] rxCrc = resultBuffer.get(crcInitPos, crcEndPos).toByteArray();
         Object[] rxCrcObj = {rxCrc};
-        resultBuffer.clear(crcInitPos, crcEndPos);
-        byte[] calcCrc = networkUtils.calculateCRC(resultBuffer).toByteArray();
+
+
+        byte[] calcCrc = networkUtils.calculateCRC(rxLenAndData).toByteArray();
         Object[] calcCrcObj = {calcCrc};
 
-        BitSet rxData = resultBuffer.get(2 * WORD_SIZE, crcInitPos);
-
-        Log.i(TAG, "RX_DATA: " + Hex.encodeHexString(rxData.toByteArray()));
+        if (hammingEnabled) {
+            Log.i(TAG, "RES_BUFF_DEC: " + Hex.encodeHexString(resultBuffer.toByteArray()));
+        }
+        Log.i(TAG, "RX_LEN+DATA: " + Hex.encodeHexString(rxLenAndData.toByteArray()));
         Log.i(TAG, "RX_CRC: " + Hex.encodeHexString(rxCrc));
         Log.i(TAG, "CALC_CRC: " + Hex.encodeHexString(calcCrc));
 
         if (Arrays.deepEquals(rxCrcObj, calcCrcObj)) {
             activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                    .onAnalyzerEvent(AnalyzerState.TX_ENDED, hamming74.decodeByteArray(rxData.toByteArray())));
+                    .onAnalyzerEvent(AnalyzerState.TX_ENDED,
+                            rxData.toByteArray()));
         } else {
             activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                    .onAnalyzerEvent(AnalyzerState.TX_ERROR, hamming74.decodeByteArray(rxData.toByteArray())));
+                    .onAnalyzerEvent(AnalyzerState.TX_ERROR,
+                            rxData.toByteArray()));
         }
     }
 
     private Boolean bitIsSet(double windowLumAverage) {
-        return onOffKeyingEnabled ? bitIsSetOOK(windowLumAverage) : bitIsSetAverage(windowLumAverage);
+        return onOffKeyingEnabled ? bitIsSetOOK(windowLumAverage)
+                                  : bitIsSetAverage(windowLumAverage);
     }
 
     private Boolean bitIsSetAverage(double windowLumAverage) {
         Boolean ret = windowLumAverage / initialLumAverage > luminosityTolerance;
         Log.d(TAG, txState.toString() + " - BitIsSet: " + (ret ? 1 : 0) + " -> " +
                 String.format("%.2f", windowLumAverage / initialLumAverage) + "(" +
-                String.format("%.2f", windowLumAverage) + ")" + " - SCI: " + syncCharIndex);
+                String.format("%.2f", windowLumAverage) + ")" + " - SEQ: " + txSeqNum);
         return ret;
     }
 
@@ -297,10 +317,10 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
 
         Boolean ret = counts[1] > counts[0];
 
-        Log.d(TAG, txState.toString() + " - BitIsSet: " + ret.toString() + " -> " +
+        Log.d(TAG, txState.toString() + " - BitIsSet: " + (ret ? 1 : 0) + " -> " +
                 String.format("%.2f", windowLumAverage / initialLumAverage) + "(" +
                 String.format("%.2f", windowLumAverage) + "), " + "(" + counts[1] + " / " +
-                (counts[0] + counts[1] + ")" + " - SCI: " + syncCharIndex));
+                (counts[0] + counts[1]) + ")" + " - SCI: " + syncCharIndex);
         return ret;
     }
 
@@ -331,8 +351,6 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
         byteBuffer.get(data, b.position(), data.length);
         List<Byte> ret = new ArrayList<>();
 
-        int len = data.length;
-
         for (int i = 0; i < data.length; i++) {
             int x = i % imageWidth;
             int y = i / imageWidth;
@@ -343,16 +361,15 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
                 ret.add(data[i]);
             }
         }
-        Log.e(TAG, "Init Len: " + len + ", Final Len: " + ret.size());
+
         return ret;
     }
 
     private void reset() {
         txState = AnalyzerState.TX_ENDED;
-        lastLuminosityValues = new ArrayList<>();
-        tmpRxBuffer = new BitSet(WORD_SIZE);
-        resultBuffer = new BitSet();
         lastLuminosityValues.clear();
+        resultBuffer.clear();
+        tmpRxBuffer.clear();
         lastAnalyzedTimestamp = 0L;
         initialLumAverage = 0;
         luminosityTolerance = 0;
@@ -360,23 +377,35 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
         txSeqNum = 0;
         syncCharIndex = 0;
         txCharIndex = 0;
-        resultBuffer.clear();
-        tmpRxBuffer.clear();
         numRxWords = 0;
         sequenceLength = 0;
-        analyze = false;
+        enabled = false;
     }
 
     private int parseLength(BitSet seqLengthBuffer) {
         byte[] seqLenBytes = seqLengthBuffer.toByteArray();
-        return seqLenBytes.length == 2 ? ((seqLenBytes[1] & 0xff) << 8) | (seqLenBytes[0] & 0xff) :
-               (seqLenBytes[0] & 0xff);
+        byte[] decodedLength = new byte[0];
+        int length;
+        if (hammingEnabled) {
+            decodedLength = hamming74.decodeByteArray(seqLenBytes);
+            length = (int) Math
+                    .ceil(((double) (decodedLength[0] & 0xff) * hamming74.ratio * WORD_SIZE -
+                            1) / WORD_SIZE);
+        } else {
+            length = seqLenBytes[0] & 0xff;
+        }
+        Log.i(TAG, "Message length: " + length + ", L(" +
+                (hammingEnabled ? Arrays.toString(decodedLength) : Arrays.toString(seqLenBytes)) +
+                ")");
+        return length;
     }
 
-    public void updateParams(Rect cropRect, long txRate, long samplingRate, boolean onOffKeying) {
+    public void updateParams(Rect cropRect, long txRate, long samplingRate, boolean onOffKeying,
+                             boolean hammingEnabled) {
         this.cropRect = cropRect;
         this.samplingRate = samplingRate;
         this.onOffKeyingEnabled = onOffKeying;
+        this.hammingEnabled = hammingEnabled;
         timePerFrameMillis = 1000 / (samplingRate * txRate); // Input data on seconds
         Log.i(TAG, "CropRect: " + new Gson().toJson(cropRect));
         Log.i(TAG, "SamplingRate: " + samplingRate);
@@ -386,14 +415,17 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
         reset();
     }
 
+    public boolean isEnabled() {
+        return enabled;
+    }
+
     public void setEnabled(boolean enabled) {
         if (enabled) {
             txState = AnalyzerState.LOADING;
             ((CustomEventListener) activity).onAnalyzerEvent(AnalyzerState.LOADING, null);
-            analyze = true;
+            this.enabled = true;
         } else {
             reset();
         }
     }
-
 }
