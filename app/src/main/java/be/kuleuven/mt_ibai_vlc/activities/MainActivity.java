@@ -389,6 +389,9 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onAnalyzerEvent(AnalyzerState eventCode, @Nullable byte[] info) {
         String text = eventCode.toString();
+        if (eventCode == AnalyzerState.TX_STARTED) {
+            text += " (" + (info[0] & 0xFF) + ")";
+        }
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
         switch (eventCode) {
             case WAITING:

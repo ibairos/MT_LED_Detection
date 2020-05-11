@@ -35,15 +35,15 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
     // Constant parameters
     private static final Pair[] luminosityToleranceTable =
             new Pair[]{
-                    new Pair<>(80.0, 1.25),
-                    new Pair<>(90.0, 1.2),
-                    new Pair<>(100.0, 1.175),
-                    new Pair<>(110.0, 1.15),
-                    new Pair<>(120.0, 1.125),
-                    new Pair<>(130.0, 1.1),
-                    new Pair<>(140.0, 1.075),
-                    new Pair<>(150.0, 1.05),
-                    new Pair<>(Double.MAX_VALUE, 1.025)
+                    new Pair<>(80.0, 1.3),
+                    new Pair<>(90.0, 1.25),
+                    new Pair<>(100.0, 1.2),
+                    new Pair<>(110.0, 1.175),
+                    new Pair<>(120.0, 1.15),
+                    new Pair<>(130.0, 1.125),
+                    new Pair<>(140.0, 1.1),
+                    new Pair<>(150.0, 1.075),
+                    new Pair<>(Double.MAX_VALUE, 1.05)
             };
 
     private static final int WORD_SIZE = 8; // UTF-8
@@ -176,8 +176,6 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
                         if (syncCharIndex == WORD_SIZE - 1) {
                             if (tmpRxBuffer.equals(START_SEQ)) {
                                 txState = AnalyzerState.TX_STARTED;
-                                activity.runOnUiThread(() -> ((CustomEventListener) activity)
-                                        .onAnalyzerEvent(AnalyzerState.TX_STARTED, null));
                             } else {
                                 Log.i(TAG, txState.toString() + " - START_SEQ - Wrong -> " +
                                         Integer.toBinaryString((int) tmpRxBuffer.toLongArray()[0]));
@@ -218,6 +216,9 @@ public class VLCReceiver implements ImageAnalysis.Analyzer {
                                 if ((hammingEnabled && numRxWords == 2) ||
                                         (!hammingEnabled && numRxWords == 1)) {
                                     sequenceLength = parseLength(resultBuffer);
+                                    activity.runOnUiThread(() -> ((CustomEventListener) activity)
+                                            .onAnalyzerEvent(AnalyzerState.TX_STARTED, new byte[] {
+                                                    (byte) sequenceLength}));
                                 }
                             } else {
                                 for (int i = 0; i < WORD_SIZE; i++) {
